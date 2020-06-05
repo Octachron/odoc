@@ -335,6 +335,37 @@ end = struct
     Term.info ~doc:"Generates a man page file from an odoc one" "man"
 end
 
+module Odoc_latex : sig
+  val cmd : unit Term.t
+  val info: Term.info
+end = struct
+
+  let manpage directories output_dir syntax input_file =
+    let env = Env.create ~important_digests:false ~directories in
+    let file = Fs.File.of_string input_file in
+    Latex.from_odoc ~env ~syntax ~output:output_dir file
+
+  let cmd =
+    let input =
+      let doc = "Input file" in
+      Arg.(required & pos 0 (some file) None & info ~doc ~docv:"file.odoc" [])
+    in
+    let syntax =
+      let doc = "Available options: ml | re" in
+      let env = Arg.env_var "ODOC_SYNTAX"
+      in
+      Arg.(value & opt (pconv convert_syntax) (Odoc_document.Renderer.OCaml) @@ info ~docv:"SYNTAX" ~doc ~env ["syntax"])
+    in
+    Term.(const handle_error $ (const manpage $
+          odoc_file_directories $ dst ~create:true () $
+          syntax $
+          input))
+
+  let info =
+    Term.info ~doc:"Generates a latex file from an odoc one" "latex"
+end
+
+
 
 module Depends = struct
   module Compile = struct
@@ -446,6 +477,7 @@ let () =
     [ Compile.(cmd, info)
     ; Odoc_html.(cmd, info)
     ; Odoc_manpage.(cmd, info)
+    ; Odoc_latex.(cmd,info)
     ; Html_fragment.(cmd, info)
     ; Support_files_command.(cmd, info)
     ; Css.(cmd, info)
