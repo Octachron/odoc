@@ -73,20 +73,26 @@ let mstyle = function
 
 
 
-let break ppf () = Format.fprintf ppf {|@,|}
+let break ppf () = Format.fprintf ppf {|\\@,|}
+let pbreak ppf () = Format.fprintf ppf {|@,@,|}
+
+let vbreak ppf space =
+  pbreak ppf (); macro "vspace" Format.pp_print_string ppf space
+
 let tbreak ppf () = Format.fprintf ppf "@,"
 
 
-let env name pp ?(args=[]) ppf content =
+let env name pp ?(opts=[]) ?(args=[]) ppf content =
   mbegin ppf name;
+  Format.pp_print_list (fun ppf pp -> Format.fprintf ppf "[%t]" pp) ppf opts;
   Format.pp_print_list (fun ppf pp -> Format.fprintf ppf "{%t}" pp) ppf args;
   pp ppf content;
   mend ppf name;
   tbreak ppf ()
 
 
-let texttt = macro "texttt"
-let alltt = env "alltt"
+let inline_code = macro "inlinecode"
+let block_code = macro "blockcode"
 
 
 let level_macro = function
@@ -130,33 +136,41 @@ let rec pp_elt ppf = function
     level_macro level with_label ppf (label,content);
     tbreak ppf ()
   | Escaped s -> escaped ppf s
-  | Break -> break ppf ()
+  | Break -> pbreak ppf ()
   | Raw s -> str ppf s
   | Tag (x,t) -> env x pp ppf t
   | Verbatim s -> verbatim ppf s
   | Ref (l,x) -> href ppf (l,x)
   | Style (s,x) -> mstyle s pp ppf x
-  | BlockCode x -> alltt pp ppf x
-  | InlineCode x -> texttt pp ppf x
+  | BlockCode x -> block_code pp ppf x
+  | InlineCode x -> inline_code pp ppf x
   | List {typ; items} -> list typ pp ppf items
   | Description items ->
-    let pair ppf (d,x) = macro "item" ~options:[bind pp d] pp ppf x in
+    (* let pair ppf (d,x) = macro "item" ~options:[bind pp d] pp ppf x in
     env "description"
       (Format.pp_print_list ~pp_sep:space pair)
-      ppf items
+      ppf items *)
+    let pair ppf (d,x) =
+      Format.fprintf ppf "%a%a%a%a" vbreak "0.2cm" pp d vbreak "0.1cm" pp x in
+    Format.pp_print_list  pair ppf items
   | Table [] -> ()
-  | Table (a::_ as rows) ->
-    let columns = List.length a in
+  | Table l ->
+    let m =
+      let m = Array.map Array.of_list (Array.of_list l) in
+      Array.init (Array.length m.(0)) (fun i -> Array.init (Array.length m) (fun j -> m.(j).(i))) in
+    let columns = Array.length m.(0) in
     let row ppf x =
       let ampersand ppf () = Format.fprintf ppf "& " in
-      Format.pp_print_list ~pp_sep:ampersand pp ppf x;
+      Format.pp_print_list ~pp_sep:ampersand pp ppf (Array.to_list x);
       break ppf () in
+    let matrix ppf m = Array.iter (row ppf) m in
     let rec repeat n ppf c = if n = 0 then () else
         Format.fprintf ppf "%s%a" c (repeat @@ n - 1) c in
+    break ppf ();
     env "tabular"
-      ~args:[bind (repeat columns) "c" ]
-      (Format.pp_print_list row)  ppf
-       rows
+      ~args:[bind (repeat columns) "l" ]
+      matrix  ppf
+      m
   | Label x -> mlabel ppf x
   | _ -> .
 
@@ -301,7 +315,7 @@ let documentedSrc ~resolve (t : DocumentedSrc.t) =
         let doc = block ~resolve dsrc.doc in
         (label dsrc.anchor @ content) @ doc
       in
-      Break :: Table [List.map one l] :: to_latex rest
+      Table [List.map one l] :: to_latex rest
   in
   to_latex t
 
