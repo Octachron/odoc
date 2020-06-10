@@ -15,8 +15,8 @@ let rec list_concat_map ?sep ~f = function
 
 type elt =
   | Txt of string
+  | TxtTT of string
   | Section of {level:int; label:string option; content:t }
-  | Escaped of string
   | Verbatim of string
   | Ref of string * t option
   | Label of string
@@ -27,7 +27,7 @@ type elt =
   | InlineCode of t
   | Break
   | List of { typ : Block.list_type; items: t list }
-  | Description of (t * t) list
+(*  | Description of (t * t) list *)
   | Table of t list list
 
 and t = elt list
@@ -58,6 +58,21 @@ let verbatim = macro "verbatim" str
 let mbegin ?options = macro "begin" ?options str
 let mend = macro "end" str
 
+let escape_text ppf s =
+  let s = String.trim s in
+  for i = 0 to String.length s - 1 do
+    match s.[i] with
+    | '{' -> Format.fprintf ppf "\\{"
+    | '}' -> Format.fprintf ppf "\\}"
+    | '\\' -> Format.fprintf ppf "\\backslash"
+    | '%' -> Format.fprintf ppf "\\%%"
+    | '~' -> Format.fprintf ppf "\\~"
+    | '_' -> Format.fprintf ppf "\\_"
+    | c -> Format.fprintf ppf "%c" c
+  done
+
+let texttt = macro "texttt" escape_text
+
 
 let label = function
   | None -> []
@@ -76,7 +91,7 @@ let mstyle = function
 let break ppf () = Format.fprintf ppf {|\\@,|}
 let pbreak ppf () = Format.fprintf ppf {|@,@,|}
 
-let vbreak ppf space =
+let _vbreak ppf space =
   pbreak ppf (); macro "vspace" Format.pp_print_string ppf space
 
 let tbreak ppf () = Format.fprintf ppf "@,"
@@ -102,7 +117,9 @@ let level_macro = function
   | 3 | _ -> macro "subsubsection"
 
 
-let space ppf () = Format.fprintf ppf " "
+let _space ppf () = Format.fprintf ppf " "
+let dotted_space ppf ()=Format.pp_print_string ppf "."
+
 
 let list kind pp ppf x =
   let list =
@@ -111,22 +128,22 @@ let list kind pp ppf x =
     | Unordered -> env "itemize" in
   let elt ppf = macro "item" pp ppf in
   list
-    (Format.pp_print_list ~pp_sep:space elt)
+    (Format.pp_print_list ~pp_sep:tbreak elt)
     ppf
     x
 
 
 let bind pp x ppf = pp ppf x
 
-let escaped ppf = function
-  | "#45" -> str ppf "-"
-  | "gt" -> str ppf ">"
-  | "#8288" -> ()
-  | s -> str ppf s
-
+let escape_entity  = function
+  | "#45" -> "-"
+  | "gt" -> ">"
+  | "#8288" -> ""
+  | s -> s
 
 let rec pp_elt ppf = function
-  | Txt x -> if String.trim x <> "" then Format.fprintf ppf "%s" x
+  | Txt x -> Format.fprintf ppf "<%a>" escape_text x
+  | TxtTT x -> texttt ppf x
   | Section {level; label; content } ->
     let with_label ppf (label,content) =
       pp ppf content;
@@ -135,53 +152,67 @@ let rec pp_elt ppf = function
       | Some label -> mlabel ppf label in
     level_macro level with_label ppf (label,content);
     tbreak ppf ()
-  | Escaped s -> escaped ppf s
   | Break -> pbreak ppf ()
   | Raw s -> str ppf s
   | Tag (x,t) -> env x pp ppf t
   | Verbatim s -> verbatim ppf s
   | Ref (l,x) -> href ppf (l,x)
   | Style (s,x) -> mstyle s pp ppf x
+  | BlockCode [] -> ()
   | BlockCode x -> block_code pp ppf x
   | InlineCode x -> inline_code pp ppf x
   | List {typ; items} -> list typ pp ppf items
-  | Description items ->
+(*  | Description items ->
     (* let pair ppf (d,x) = macro "item" ~options:[bind pp d] pp ppf x in
     env "description"
       (Format.pp_print_list ~pp_sep:space pair)
       ppf items *)
     let pair ppf (d,x) =
-      Format.fprintf ppf "%a%a%a%a" vbreak "0.2cm" pp d vbreak "0.1cm" pp x in
-    Format.pp_print_list  pair ppf items
+      Format.fprintf ppf "%a%a%a" pp d break () pp x in
+    Format.fprintf ppf "%a%a%a"
+      vbreak "0.2cm"
+      (Format.pp_print_list pair) items
+      vbreak "0.2cm"
+*)
   | Table [] -> ()
-  | Table l ->
-    let m =
-      let m = Array.map Array.of_list (Array.of_list l) in
-      Array.init (Array.length m.(0)) (fun i -> Array.init (Array.length m) (fun j -> m.(j).(i))) in
-    let columns = Array.length m.(0) in
+  | Table (a  :: _ as l) ->
+    let columns = List.length a in
     let row ppf x =
       let ampersand ppf () = Format.fprintf ppf "& " in
-      Format.pp_print_list ~pp_sep:ampersand pp ppf (Array.to_list x);
+      Format.pp_print_list ~pp_sep:ampersand pp ppf x;
       break ppf () in
-    let matrix ppf m = Array.iter (row ppf) m in
+    let matrix ppf m = List.iter (row ppf) m in
     let rec repeat n ppf c = if n = 0 then () else
         Format.fprintf ppf "%s%a" c (repeat @@ n - 1) c in
     break ppf ();
     env "tabular"
       ~args:[bind (repeat columns) "l" ]
       matrix  ppf
-      m
+      l;
+    break ppf ()
   | Label x -> mlabel ppf x
   | _ -> .
 
-and pp ppf x = Format.fprintf  ppf "%a" (Format.pp_print_list ~pp_sep:space pp_elt) x
+and pp ppf = function
+  | [] -> ()
+  | Break :: (Break :: _ as q) ->
+    pp ppf q
+  | [a] -> pp_elt ppf a
+  | a :: Txt "\n" :: q ->
+    pp_elt ppf a; Format.pp_print_cut ppf (); pp ppf q
+  | a :: (Break ::_ as q) ->
+    pp_elt ppf a; pp ppf q
+  | Break :: q -> pp_elt ppf Break; pp ppf q
+  | a :: q ->
+    pp_elt ppf a; dotted_space ppf (); pp ppf q
 
 and href ppf (l,t) =
   match t with
   | None ->
     macro "ref" str ppf l
   | Some txt ->
-    Format.fprintf ppf {|\hyperref[%a]{%a\ref*{%a}}|} escape_ref l pp txt escape_ref l
+    (* {|\hyperref[%a]{%a\ref*{%a}}|} *)
+    Format.fprintf ppf {|\hyperref[%a]{%a}|} escape_ref l pp txt
 
 
 type package = { name:string; options:string list }
@@ -207,7 +238,7 @@ module Link = struct
 
  let href ~resolve:_ (x:Odoc_document.Url.t) =
    Format.asprintf "%s"
-(*     flatten_path x.page 
+(*     flatten_path x.page
      x.kind *)
      x.anchor
 end
@@ -221,64 +252,84 @@ let source k (t : Source.t) =
   in
   tokens t
 
+let if_not_empty f x =
+  let x = String.trim x in
+  if x = "" then [] else [f x]
+
+let linebreaks t =
+  let fragment = String.split_on_char '\n' t in
+  list_concat_map ~sep:Break ~f:(if_not_empty (fun x -> TxtTT x)) fragment
+
 let rec internalref
     ~resolve
     (t : InternalLink.t) =
   match t with
   | Resolved (uri, content) ->
     let href = Link.href ~resolve uri in
-    Ref(href, Some (inline ~resolve content))
+    Ref(href, Some (inline ~in_source:false ~resolve content))
   | Unresolved content ->
     (* let title =
      *   Html.a_title (Printf.sprintf "unresolved reference to %S"
      *       (ref_to_string ref)
      * in *)
-    Ref("xref-unresolved", Some(inline ~resolve content))
+    Ref("xref-unresolved", Some(inline ~in_source:false ~resolve content))
 
-and inline ~resolve (l : Inline.t) =
+and inline ~in_source ~resolve (l : Inline.t) =
   let one (t : Inline.one) =
     match t.desc with
-    | Text s -> [Txt s]
-    | Entity s -> [Escaped s]
-    | Linebreak -> []
+    | Text s -> if in_source then linebreaks s else if_not_empty (fun x -> Txt x) s
+    | Linebreak -> [Break]
     | Styled (style, c) ->
-      [Style(style, inline ~resolve c)]
+      [Style(style, inline ~in_source ~resolve c)]
     | Link (href, c) ->
-      let content = inline ~resolve  c in
+      let content = inline ~resolve ~in_source:false  c in
       [Ref(href, Some content)]
     | InternalLink c ->
       [internalref ~resolve c]
     | Source c ->
-      [InlineCode (source (inline ~resolve) c)]
-    | Raw_markup r ->
-      raw_markup r in
-  list_concat_map ~f:one l
+      [InlineCode (source (inline ~resolve ~in_source:true) c)]
+    | Raw_markup r -> raw_markup r
+    | Entity _ -> assert false in
+  let rec prettify = function
+    | { Inline.desc = Inline.Text x; _ } as t :: { desc = Inline.Entity e; _ } :: q ->
+      prettify ({ t with desc = Inline.Text (x ^ escape_entity e) } :: q)
+    | { desc = Inline.Entity  e; _ } as a :: q ->
+      prettify ({ a with desc = Inline.Text (escape_entity e) } :: q)
+    | o :: q -> one o @ prettify q
+    | [] -> [] in
+  prettify l
 
 let heading ~resolve (h : Heading.t) =
-  let content = inline ~resolve h.title in
+  let content = inline ~in_source:false ~resolve h.title in
   Section { label=h.label; level=h.level; content }
+
+let non_empty_block_code ~resolve c =
+  let s = source (inline ~in_source:true ~resolve) c in
+  match s with
+  | [] -> []
+  | _ :: _ as l -> [BlockCode l]
+
 
 let rec block ~resolve (l: Block.t)  =
   let one (t : Block.one) =
     match t.desc with
     | Inline i ->
-      inline ~resolve i
+      inline ~in_source:true ~resolve i
     | Paragraph i ->
-      inline ~resolve i
+      inline ~in_source:false ~resolve i @ [Break]
     | List (typ, l) ->
       [List { typ; items = List.map (block ~resolve) l }]
     | Description l ->
-      [Description (List.map (fun (i,b) ->
-          let i = inline ~resolve i in
-          (i, block ~resolve b)
-        ) l ) ]
+      List.concat_map (fun (i,b) ->
+          let i = inline ~in_source:true ~resolve i in
+          i @ Break :: block ~resolve b
+        ) l
     | Raw_markup r ->
       raw_markup r
     | Verbatim s -> [Verbatim s]
-    | Source c ->
-      [BlockCode (source (inline ~resolve) c) ]
+    | Source c -> non_empty_block_code ~resolve c
   in
-  list_concat_map ~sep:Break l ~f:one
+  list_concat_map l ~f:one
 
 
 let documentedSrc ~resolve (t : DocumentedSrc.t) =
@@ -303,19 +354,19 @@ let documentedSrc ~resolve (t : DocumentedSrc.t) =
     | [] -> []
     | (Code _ | Subpage _) :: _ ->
       let code, _, rest = take_code t in
-      BlockCode (source (inline ~resolve) code)
-      :: to_latex rest
+      non_empty_block_code ~resolve code
+      @ to_latex rest
     | (Documented _ | Nested _) :: _ ->
       let l, _, rest = take_descr t in
       let one dsrc =
         let content = match dsrc.code with
-          | `D code -> inline ~resolve code
+          | `D code -> inline ~in_source:true ~resolve code
           | `N n -> to_latex n
         in
-        let doc = block ~resolve dsrc.doc in
-        (label dsrc.anchor @ content) @ doc
+        let doc = [block ~resolve dsrc.doc] in
+        (label dsrc.anchor @ content) :: doc
       in
-      Table [List.map one l] :: to_latex rest
+      Table (List.map one l) :: to_latex rest
   in
   to_latex t
 
@@ -359,7 +410,7 @@ let items ~resolve l =
         | Page p -> items p.items
       in
       let docs = block ~resolve doc in
-      let _summary = source (inline ~resolve) summary in
+      let _summary = source (inline ~in_source:true ~resolve) summary in
       let content = included in
       (label anchor @ docs @ content)
       |> continue_with rest
@@ -368,8 +419,8 @@ let items ~resolve l =
       let content =  label anchor @ documentedSrc ~resolve content in
       let elts = match doc with
         | [] -> content
-        | docs ->
-          [Description [content, block ~resolve docs]]
+        | docs -> content @ Break :: block ~resolve docs
+          (*[Description [content, block ~resolve docs]] *)
       in
       continue_with rest elts
 
