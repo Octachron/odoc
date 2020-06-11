@@ -13,9 +13,10 @@ let rec list_concat_map ?sep ~f = function
     | Some sep -> hd @ sep :: tl
 
 
+type text_kind = Verbatim | Textual
+
 type elt =
-  | Txt of string
-  | TxtTT of string
+  | Txt of { kind: text_kind; words: string list }
   | Section of {level:int; label:string option; content:t }
   | Verbatim of string
   | Ref of string * t option
@@ -59,7 +60,6 @@ let mbegin ?options = macro "begin" ?options str
 let mend = macro "end" str
 
 let escape_text ppf s =
-  let s = String.trim s in
   for i = 0 to String.length s - 1 do
     match s.[i] with
     | '{' -> Format.fprintf ppf "\\{"
@@ -71,8 +71,8 @@ let escape_text ppf s =
     | c -> Format.fprintf ppf "%c" c
   done
 
-let texttt = macro "texttt" escape_text
-
+let texttt ppf s =
+    macro "texttt" escape_text ppf s
 
 let label = function
   | None -> []
@@ -118,7 +118,8 @@ let level_macro = function
 
 
 let _space ppf () = Format.fprintf ppf " "
-let dotted_space ppf ()=Format.pp_print_string ppf "."
+let _dotted_space ppf ()=Format.pp_print_string ppf "."
+let none _ppf () = ()
 
 
 let list kind pp ppf x =
@@ -142,8 +143,11 @@ let escape_entity  = function
   | s -> s
 
 let rec pp_elt ppf = function
-  | Txt x -> Format.fprintf ppf "<%a>" escape_text x
-  | TxtTT x -> texttt ppf x
+  | Txt { kind; words } ->
+    let word_printer = match kind with
+      | Textual -> escape_text
+      | Verbatim -> texttt in
+    Format.pp_print_list word_printer ~pp_sep:none ppf words
   | Section {level; label; content } ->
     let with_label ppf (label,content) =
       pp ppf content;
@@ -197,14 +201,8 @@ and pp ppf = function
   | [] -> ()
   | Break :: (Break :: _ as q) ->
     pp ppf q
-  | [a] -> pp_elt ppf a
-  | a :: Txt "\n" :: q ->
-    pp_elt ppf a; Format.pp_print_cut ppf (); pp ppf q
-  | a :: (Break ::_ as q) ->
-    pp_elt ppf a; pp ppf q
-  | Break :: q -> pp_elt ppf Break; pp ppf q
   | a :: q ->
-    pp_elt ppf a; dotted_space ppf (); pp ppf q
+    pp_elt ppf a; pp ppf q
 
 and href ppf (l,t) =
   match t with
@@ -253,12 +251,11 @@ let source k (t : Source.t) =
   tokens t
 
 let if_not_empty f x =
-  let x = String.trim x in
   if x = "" then [] else [f x]
 
-let linebreaks t =
+let block_code_text t =
   let fragment = String.split_on_char '\n' t in
-  list_concat_map ~sep:Break ~f:(if_not_empty (fun x -> TxtTT x)) fragment
+  list_concat_map ~sep:Break ~f:(if_not_empty (fun x -> Txt { kind=Verbatim; words=[x]})) fragment
 
 let rec internalref
     ~resolve
@@ -277,7 +274,7 @@ let rec internalref
 and inline ~in_source ~resolve (l : Inline.t) =
   let one (t : Inline.one) =
     match t.desc with
-    | Text s -> if in_source then linebreaks s else if_not_empty (fun x -> Txt x) s
+    | Text _s -> assert false
     | Linebreak -> [Break]
     | Styled (style, c) ->
       [Style(style, inline ~in_source ~resolve c)]
@@ -289,14 +286,34 @@ and inline ~in_source ~resolve (l : Inline.t) =
     | Source c ->
       [InlineCode (source (inline ~resolve ~in_source:true) c)]
     | Raw_markup r -> raw_markup r
-    | Entity _ -> assert false in
+    | Entity s -> [Txt { kind=if in_source then Verbatim else Textual; words = [escape_entity s]}] in
+
+  let take_text (l: Inline.t) =
+    Doctree.Take.until l ~classify:(function
+      | { Inline.desc = Text code; _ } -> Accum [code]
+      | { desc = Entity e; _ } -> Accum [escape_entity e]
+      | _ -> Stop_and_keep
+    )
+  in
+(* if in_source then block_code_txt s else if_not_empty (fun x -> Txt x) s *)
   let rec prettify = function
-    | { Inline.desc = Inline.Text x; _ } as t :: { desc = Inline.Entity e; _ } :: q ->
-      prettify ({ t with desc = Inline.Text (x ^ escape_entity e) } :: q)
-    | { desc = Inline.Entity  e; _ } as a :: q ->
-      prettify ({ a with desc = Inline.Text (escape_entity e) } :: q)
+    | { Inline.desc = Inline.Text _; _ } :: _ as l ->
+      let words, _, rest = take_text l in
+      let text =
+        if in_source then
+          List.concat_map  block_code_text words
+        else
+          let words = List.filter (( <> ) "" ) words in
+          [Txt { kind = if in_source then Verbatim else Textual; words }]
+      in
+      text @ prettify rest
     | o :: q -> one o @ prettify q
     | [] -> [] in
+
+(*as t :: { desc = Inline.Entity e; _ } :: q ->
+      prettify ({ t with desc = Inline.Text (x ^ escape_entity e) } :: q)
+    | { desc = Inline.Entity  e; _ } as a :: q ->
+      prettify ({ a with desc = Inline.Text (escape_entity e) } :: q) *)
   prettify l
 
 let heading ~resolve (h : Heading.t) =
@@ -314,7 +331,7 @@ let rec block ~resolve (l: Block.t)  =
   let one (t : Block.one) =
     match t.desc with
     | Inline i ->
-      inline ~in_source:true ~resolve i
+      inline ~in_source:false ~resolve i
     | Paragraph i ->
       inline ~in_source:false ~resolve i @ [Break]
     | List (typ, l) ->
