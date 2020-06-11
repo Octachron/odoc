@@ -19,7 +19,8 @@ type elt =
   | Txt of { kind: text_kind; words: string list }
   | Section of {level:int; label:string option; content:t }
   | Verbatim of string
-  | Ref of string * t option
+  | Internal_ref of string * t option
+  | External_ref of string * t option
   | Label of string
   | Raw of string
   | Tag of string * t
@@ -50,7 +51,8 @@ let macro name ?(options=[]) pp ppf content =
 let escape_ref ppf s =
   for i = 0 to String.length s - 1 do
     match s.[i] with
-    | '_' -> Format.fprintf ppf "--underscore--"
+    | '_' -> Format.fprintf ppf "+"
+    | '+' -> Format.fprintf ppf "++"
     | c -> Format.fprintf ppf "%c" c
   done
 
@@ -59,17 +61,28 @@ let verbatim = macro "verbatim" str
 let mbegin ?options = macro "begin" ?options str
 let mend = macro "end" str
 
-let escape_text ppf s =
-  for i = 0 to String.length s - 1 do
-    match s.[i] with
-    | '{' -> Format.fprintf ppf "\\{"
-    | '}' -> Format.fprintf ppf "\\}"
-    | '\\' -> Format.fprintf ppf "\\backslash"
-    | '%' -> Format.fprintf ppf "\\%%"
-    | '~' -> Format.fprintf ppf "\\~"
-    | '_' -> Format.fprintf ppf "\\_"
-    | c -> Format.fprintf ppf "%c" c
-  done
+let escape_text =
+  let b = Buffer.create 17 in
+  fun ppf s ->
+    for i = 0 to String.length s - 1 do
+      match s.[i] with
+      | '{' -> Buffer.add_string b "\\{"
+      | '}' ->  Buffer.add_string b "\\}"
+      | '\\' ->  Buffer.add_string b "\\textbackslash{}"
+      | '%' ->  Buffer.add_string b "\\%%"
+      | '~' ->  Buffer.add_string b "\texttilde{}"
+      | '^' -> Buffer.add_string b "\textasciicircum{}"
+      | '_' ->  Buffer.add_string b "\\_"
+      | '&' ->  Buffer.add_string b "\\&"
+      | '#' ->  Buffer.add_string b "\\#"
+      | '$' ->  Buffer.add_string b "\\$"
+
+
+      | c ->  Buffer.add_char b c
+    done;
+    let s = Buffer.contents b in
+    Buffer.reset b;
+    Fmt.string ppf s
 
 let texttt ppf s =
     macro "texttt" escape_text ppf s
@@ -160,7 +173,8 @@ let rec pp_elt ppf = function
   | Raw s -> str ppf s
   | Tag (x,t) -> env x pp ppf t
   | Verbatim s -> verbatim ppf s
-  | Ref (l,x) -> href ppf (l,x)
+  | Internal_ref (l,x) -> hyperref ppf (l,x)
+  | External_ref (l,x) -> href ppf (l,x)
   | Style (s,x) -> mstyle s pp ppf x
   | BlockCode [] -> ()
   | BlockCode x -> block_code pp ppf x
@@ -204,7 +218,7 @@ and pp ppf = function
   | a :: q ->
     pp_elt ppf a; pp ppf q
 
-and href ppf (l,t) =
+and hyperref ppf (l,t) =
   match t with
   | None ->
     macro "ref" str ppf l
@@ -212,6 +226,11 @@ and href ppf (l,t) =
     (* {|\hyperref[%a]{%a\ref*{%a}}|} *)
     Format.fprintf ppf {|\hyperref[%a]{%a}|} escape_ref l pp txt
 
+and href ppf (l,txt) =
+  match txt with
+  | Some txt ->
+    Format.fprintf ppf {|\href{%s}{%a}|} l pp txt
+  | None -> Format.fprintf ppf {|\url{%s}|} l
 
 type package = { name:string; options:string list }
 type header = {
@@ -263,13 +282,13 @@ let rec internalref
   match t with
   | Resolved (uri, content) ->
     let href = Link.href ~resolve uri in
-    Ref(href, Some (inline ~in_source:false ~resolve content))
+    Internal_ref(href, Some (inline ~in_source:false ~resolve content))
   | Unresolved content ->
     (* let title =
      *   Html.a_title (Printf.sprintf "unresolved reference to %S"
      *       (ref_to_string ref)
      * in *)
-    Ref("xref-unresolved", Some(inline ~in_source:false ~resolve content))
+    Internal_ref("xref-unresolved", Some(inline ~in_source:false ~resolve content))
 
 and inline ~in_source ~resolve (l : Inline.t) =
   let one (t : Inline.one) =
@@ -278,9 +297,9 @@ and inline ~in_source ~resolve (l : Inline.t) =
     | Linebreak -> [Break]
     | Styled (style, c) ->
       [Style(style, inline ~in_source ~resolve c)]
-    | Link (href, c) ->
+    | Link (ext, c) ->
       let content = inline ~resolve ~in_source:false  c in
-      [Ref(href, Some content)]
+      [External_ref(ext, Some content)]
     | InternalLink c ->
       [internalref ~resolve c]
     | Source c ->
@@ -327,7 +346,7 @@ let non_empty_block_code ~resolve c =
   | _ :: _ as l -> [BlockCode l]
 
 
-let rec block ~resolve (l: Block.t)  =
+let rec block ~in_source ~resolve (l: Block.t)  =
   let one (t : Block.one) =
     match t.desc with
     | Inline i ->
@@ -335,16 +354,16 @@ let rec block ~resolve (l: Block.t)  =
     | Paragraph i ->
       inline ~in_source:false ~resolve i @ [Break]
     | List (typ, l) ->
-      [List { typ; items = List.map (block ~resolve) l }]
+      [List { typ; items = List.map (block ~in_source:false ~resolve) l }]
     | Description l ->
       List.concat_map (fun (i,b) ->
           let i = inline ~in_source:true ~resolve i in
-          i @ Break :: block ~resolve b
+          i @ Break :: block ~resolve ~in_source:true b
         ) l
     | Raw_markup r ->
       raw_markup r
     | Verbatim s -> [Verbatim s]
-    | Source c -> non_empty_block_code ~resolve c
+    | Source c -> non_empty_block_code ~resolve c @ if in_source then [] else [Break]
   in
   list_concat_map l ~f:one
 
@@ -380,7 +399,7 @@ let documentedSrc ~resolve (t : DocumentedSrc.t) =
           | `D code -> inline ~in_source:true ~resolve code
           | `N n -> to_latex n
         in
-        let doc = [block ~resolve dsrc.doc] in
+        let doc = [block ~resolve ~in_source:true dsrc.doc] in
         (label dsrc.anchor @ content) :: doc
       in
       Table (List.map one l) :: to_latex rest
@@ -412,7 +431,7 @@ let items ~resolve l =
         | Item.Text text -> Accum text
         | _ -> Stop_and_keep)
       in
-      let content = block ~resolve text in
+      let content = block ~resolve ~in_source:false text in
       let elts = content in
       elts
       |> continue_with rest
@@ -426,7 +445,7 @@ let items ~resolve l =
         | Items i -> items i
         | Page p -> items p.items
       in
-      let docs = block ~resolve doc in
+      let docs = block ~resolve ~in_source:true  doc in
       let _summary = source (inline ~in_source:true ~resolve) summary in
       let content = included in
       (label anchor @ docs @ content)
@@ -436,7 +455,7 @@ let items ~resolve l =
       let content =  label anchor @ documentedSrc ~resolve content in
       let elts = match doc with
         | [] -> content
-        | docs -> content @ Break :: block ~resolve docs
+        | docs -> content @ Break :: block ~resolve ~in_source:true docs
           (*[Description [content, block ~resolve docs]] *)
       in
       continue_with rest elts
