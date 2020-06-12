@@ -83,6 +83,20 @@ let escape_ref ppf s =
     | c -> Format.fprintf ppf "%c" c
   done
 
+module Link = struct
+
+  let rec flatten_path ppf (x: Odoc_document.Url.Path.t) = match x.parent with
+    | Some p -> Format.fprintf ppf "%a-%s-%s" flatten_path p x.kind x.name
+    | None -> Format.fprintf ppf "%s-%s" x.kind x.name
+
+ let label (x:Odoc_document.Url.t) =
+   Format.asprintf "%a-%s"
+     flatten_path x.page
+     x.anchor
+
+end
+
+
 
 let bind pp x ppf = pp ppf x
 let mlabel ppf = macro "label" escape_ref ppf
@@ -101,7 +115,7 @@ let texttt ppf s =
 
 let label = function
   | None -> []
-  | Some  {Odoc_document.Url.Anchor.anchor ; _ } -> [Label anchor]
+  | Some  x (* {Odoc_document.Url.Anchor.anchor ; page;  _ }*) -> [Label (Link.label  x)]
 
 
 
@@ -258,18 +272,6 @@ let raw_markup (t:Raw_markup.t) =
   | _ -> []
 
 
-module Link = struct
-
-  let rec _flatten_path ppf (x: Odoc_document.Url.Path.t) = match x.parent with
-    | Some p -> Format.fprintf ppf "%a-%s-%s" _flatten_path p x.kind x.name
-    | None -> Format.fprintf ppf "%s-%s" x.kind x.name
-
- let href ~resolve:_ (x:Odoc_document.Url.t) =
-   Format.asprintf "%s"
-(*     flatten_path x.page
-     x.kind *)
-     x.anchor
-end
 
 let source k (t : Source.t) =
   let rec token (x : Source.token) = match x with
@@ -292,7 +294,7 @@ let rec internalref
     (t : InternalLink.t) =
   match t with
   | Resolved (uri, content) ->
-    let href = Link.href ~resolve uri in
+    let href = Link.label uri in
     Internal_ref(href, Some (inline ~in_source:false ~resolve content))
   | Unresolved content ->
     (* let title =
