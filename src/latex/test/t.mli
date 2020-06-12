@@ -91,7 +91,13 @@ type greek =
 (** Here it goes *)
 
 
-type inlined = 
+type inlined =
   | Alpha of { aleph:int (** more comment*) ; beth:int (** even more *) } (** will it stop *)
   | Beta of { gamma:int (** more gamma *) ; delta:int (** don't forget delta *) } (** an encore *)
 (** at last it stops *)
+
+
+(** {1 Linking } *)
+
+(** Keep your enemy at a the point of the link *)
+type u = So_far_away.t
