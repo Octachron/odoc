@@ -107,7 +107,7 @@ let label = function
 
 let mstyle = function
   | `Emphasis | `Italic -> macro "emph"
-  | `Bold -> macro "bold"
+  | `Bold -> macro "textbf"
   | `Subscript -> macro "textsubscript"
   | `Superscript -> macro "textsuperscript"
 
@@ -136,10 +136,11 @@ let block_code = macro "blockcode"
 
 
 let level_macro = function
-  | 0 -> macro "section"
-  | 1 -> macro "section"
-  | 2 -> macro "subsection"
-  | 3 | _ -> macro "subsubsection"
+  | 0 -> (fun x -> macro "section" x)
+  | 1 -> (fun x -> macro "subsection" x)
+  | 2 -> (fun x -> macro "subsubsection" x)
+  | 3 | _ -> fun pp ppf x ->
+    macro "paragraph" ~options:[bind pp x] (fun _ () -> ()) ppf ()
 
 
 let _space ppf () = Format.fprintf ppf " "
@@ -210,14 +211,15 @@ let rec pp_elt ppf = function
       Fmt.list ~sep:ampersand pp ppf x;
       break ppf () in
     let matrix ppf m = List.iter (row ppf) m in
-    let rec repeat n c ppf = if n = 0 then () else
-        Format.fprintf ppf "%s%t" c (repeat (n - 1) c) in
+    let rec repeat n s ppf = if n = 0 then () else
+        Format.fprintf ppf "%t%t" s (repeat (n - 1) s) in
     break ppf ();
-    Format.fprintf ppf "{";
-    env "tabularx"
-      ~args:[Format.dprintf {|\linewidth|}; Format.dprintf "X%t" (repeat (columns-1) "X") ]
+    let frac ppf = Format.fprintf ppf " p{%.2f\\linewidth} " (1. /. float columns) in
+(*    Format.fprintf ppf "{";*)
+    env "tabular"
+      ~args:[(*Format.dprintf {|\linewidth|};*) repeat columns frac  ]
       matrix ppf l;
-    Format.fprintf ppf "}";
+(*    Format.fprintf ppf "}";*)
     break ppf ()
   | Label x -> mlabel ppf x
   | _ -> .
@@ -409,7 +411,7 @@ let documentedSrc ~resolve (t : DocumentedSrc.t) =
           | `N n -> to_latex n
         in
         let doc = [block ~resolve ~in_source:true dsrc.doc] in
-        (label dsrc.anchor @ content) :: doc
+        (content @ label dsrc.anchor ) :: doc
       in
       Table (List.map one l) :: to_latex rest
   in
