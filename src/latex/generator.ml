@@ -48,18 +48,6 @@ let macro name ?(options=[]) pp ppf content =
 
 
 
-let escape_ref ppf s =
-  for i = 0 to String.length s - 1 do
-    match s.[i] with
-    | '_' -> Format.fprintf ppf "+"
-    | '+' -> Format.fprintf ppf "++"
-    | c -> Format.fprintf ppf "%c" c
-  done
-
-let mlabel ppf = macro "label" escape_ref ppf
-let verbatim = macro "verbatim" str
-let mbegin ?options = macro "begin" ?options str
-let mend = macro "end" str
 
 let escape_text =
   let b = Buffer.create 17 in
@@ -69,7 +57,7 @@ let escape_text =
       | '{' -> Buffer.add_string b "\\{"
       | '}' ->  Buffer.add_string b "\\}"
       | '\\' ->  Buffer.add_string b "\\textbackslash{}"
-      | '%' ->  Buffer.add_string b "\\%%"
+      | '%' ->  Buffer.add_string b "\\%"
       | '~' ->  Buffer.add_string b "\texttilde{}"
       | '^' -> Buffer.add_string b "\textasciicircum{}"
       | '_' ->  Buffer.add_string b "\\_"
@@ -83,6 +71,30 @@ let escape_text =
     let s = Buffer.contents b in
     Buffer.reset b;
     Fmt.string ppf s
+
+
+
+let escape_ref ppf s =
+  for i = 0 to String.length s - 1 do
+    match s.[i] with
+    | '~' -> Format.fprintf ppf "---"
+    | '_' -> Format.fprintf ppf "+"
+    | '+' -> Format.fprintf ppf "++"
+    | c -> Format.fprintf ppf "%c" c
+  done
+
+
+let bind pp x ppf = pp ppf x
+let mlabel ppf = macro "label" escape_ref ppf
+let verbatim = macro "verbatim" str
+let mbegin ?options = macro "begin" ?options str
+let mend = macro "end" str
+let mhyperref ref x =
+  (* {|\hyperref[%a]{%a\ref*{%a}}|} *)
+  match ref with
+  | "" ->  x
+  | s -> macro "hyperref" ~options:[bind escape_ref s] x
+
 
 let texttt ppf s =
     macro "texttt" escape_text ppf s
@@ -147,8 +159,6 @@ let list kind pp ppf x =
     x
 
 
-let bind pp x ppf = pp ppf x
-
 let escape_entity  = function
   | "#45" -> "-"
   | "gt" -> ">"
@@ -197,16 +207,17 @@ let rec pp_elt ppf = function
     let columns = List.length a in
     let row ppf x =
       let ampersand ppf () = Format.fprintf ppf "& " in
-      Format.pp_print_list ~pp_sep:ampersand pp ppf x;
+      Fmt.list ~sep:ampersand pp ppf x;
       break ppf () in
     let matrix ppf m = List.iter (row ppf) m in
-    let rec repeat n ppf c = if n = 0 then () else
-        Format.fprintf ppf "%s%a" c (repeat @@ n - 1) c in
+    let rec repeat n c ppf = if n = 0 then () else
+        Format.fprintf ppf "%s%t" c (repeat (n - 1) c) in
     break ppf ();
-    env "tabular"
-      ~args:[bind (repeat columns) "l" ]
-      matrix  ppf
-      l;
+    Format.fprintf ppf "{";
+    env "tabularx"
+      ~args:[Format.dprintf {|\linewidth|}; Format.dprintf "X%t" (repeat (columns-1) "X") ]
+      matrix ppf l;
+    Format.fprintf ppf "}";
     break ppf ()
   | Label x -> mlabel ppf x
   | _ -> .
@@ -222,9 +233,7 @@ and hyperref ppf (l,t) =
   match t with
   | None ->
     macro "ref" str ppf l
-  | Some txt ->
-    (* {|\hyperref[%a]{%a\ref*{%a}}|} *)
-    Format.fprintf ppf {|\hyperref[%a]{%a}|} escape_ref l pp txt
+  | Some txt -> mhyperref l pp ppf txt
 
 and href ppf (l,txt) =
   match txt with
