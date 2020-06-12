@@ -3,7 +3,7 @@
 \usepackage[colorlinks=true]{hyperref}
 \usepackage{color}
 \usepackage{lmodern}
-
+\usepackage[T1]{fontenc}
 \newcommand{\blockcode}[1]{{\setlength{\parindent}{0cm}#1}}
 \newcommand{\inlinecode}[1]{#1}
 
@@ -12,7 +12,9 @@
 \newenvironment{constructor}{\bfseries}{}
 \newenvironment{type-var}{\itshape\ttfamily}{}
 
+%\renewcommand{\arraystretch}{0.5}
 
 \begin{document}
+
 \input{output/T.tex}
 \end{document}

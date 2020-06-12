@@ -50,13 +50,17 @@ and even =
  *)
 
 (** A very fancy non empty list type *)
-  type 'a nonempty_list =
-    (::) of 'a * 'a list
+type 'a nonempty_list =
+  (::) of 'a * 'a list
 
 
-  (** A map function. Look at {!nonempty_list} to see why the function is total *)
-  val map: ('a -> 'b) -> 'a nonempty_list -> 'b nonempty_list
+(** A map function. Look at {!nonempty_list} to see why the function is total
+    @since past future
+*)
+val map: ('a -> 'b) -> 'a nonempty_list -> 'b nonempty_list
 
+(** hd is also well defined *)
+val hd: 'a nonempty_list -> 'a
 
 (** {1 Long types} *)
 
