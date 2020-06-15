@@ -15,6 +15,12 @@ let rec list_concat_map ?sep ~f = function
 
 type text_kind = Verbatim | Textual
 
+type break_hierarchy =
+  | Aesthetic
+  | Line
+  | Paragraph
+(*  | Separation *)
+
 type elt =
   | Txt of { kind: text_kind; words: string list }
   | Section of {level:int; label:string option; content:t }
@@ -27,7 +33,7 @@ type elt =
   | Style of [`Emphasis|`Bold|`Superscript|`Subscript|`Italic] * t
   | BlockCode of t
   | InlineCode of t
-  | Break
+  | Break of break_hierarchy
   | List of { typ : Block.list_type; items: t list }
   | Description of (t * t) list
   | Table of t list list
@@ -127,13 +133,25 @@ let mstyle = function
 
 
 
-let break ppf () = Format.fprintf ppf {|\\@,|}
-let pbreak ppf () = Format.fprintf ppf {|@,@,|}
+let break level ppf motivation =
+  let pre: _ format6 = match level with
+    | Line -> {|\\|}
+(*    | Separation -> {|\\@,\vspace{0.2cm}|}*)
+    | _ -> "" in
+  let post: _ format6 = match level with
+    | Line (*| Separation*) | Aesthetic -> "@,"
+    | Paragraph -> "@,@," in
+  Fmt.pf ppf (pre ^^ "%%" ^^ motivation ^^ post)
 
-let _vbreak ppf space =
-  pbreak ppf (); macro "vspace" Format.pp_print_string ppf space
+(*
+let break ppf motivation = Format.fprintf ppf ({|\\%%|} ^^ motivation ^^ "@,")
+let pbreak ppf motivation = Format.fprintf ppf ({|%%|} ^^ motivation ^^ "@,@,")
 
-let tbreak ppf () = Format.fprintf ppf "@,"
+let _vbreak motivation ppf space =
+  let () = pbreak ppf motivation in
+  macro "vspace" Format.pp_print_string ppf space
+let tbreak ppf motivation = Format.fprintf ppf ("%%" ^^ motivation ^^ "@,")
+*)
 
 
 let env name pp ?(opts=[]) ?(args=[]) ppf content =
@@ -142,7 +160,7 @@ let env name pp ?(opts=[]) ?(args=[]) ppf content =
   Format.pp_print_list (fun ppf pp -> Format.fprintf ppf "{%t}" pp) ppf args;
   pp ppf content;
   mend ppf name;
-  tbreak ppf ()
+  break Aesthetic ppf "after env %s" name
 
 
 let inline_code = macro "inlinecode"
@@ -168,14 +186,14 @@ let list kind pp ppf x =
     | Unordered -> env "itemize" in
   let elt ppf = macro "item" pp ppf in
   list
-    (Fmt.list ~sep:tbreak elt)
+    (Fmt.list ~sep:(fun ppf () -> break Aesthetic ppf "list") elt)
     ppf
     x
 
 let description pp ppf x =
   let elt ppf (d,elt) = macro "item" ~options:[bind pp d] pp ppf elt in
   env "description"
-    (Fmt.list ~sep:tbreak elt)
+    (Fmt.list ~sep:(fun ppf () -> break Aesthetic ppf "description") elt)
     ppf
     x
 
@@ -199,9 +217,8 @@ let rec pp_elt ppf = function
       match label with
       | None -> ()
       | Some label -> mlabel ppf label in
-    level_macro level with_label ppf (label,content);
-    tbreak ppf ()
-  | Break -> pbreak ppf ()
+    level_macro level with_label ppf (label,content)
+  | Break lvl -> break lvl ppf "elt"
   | Raw s -> str ppf s
   | Tag (x,t) -> env x pp ppf t
   | Verbatim s -> verbatim ppf s
@@ -231,25 +248,25 @@ let rec pp_elt ppf = function
     let row ppf x =
       let ampersand ppf () = Format.fprintf ppf "& " in
       Fmt.list ~sep:ampersand pp ppf x;
-      break ppf () in
+      break Line ppf "row" in
     let matrix ppf m = List.iter (row ppf) m in
     let rec repeat n s ppf = if n = 0 then () else
         Format.fprintf ppf "%t%t" s (repeat (n - 1) s) in
-    break ppf ();
     let frac ppf = Format.fprintf ppf " p{%.2f\\linewidth} " (1. /. float columns) in
 (*    Format.fprintf ppf "{";*)
+    break Line ppf "before tabular";
     env "tabular"
       ~args:[(*Format.dprintf {|\linewidth|};*) repeat columns frac  ]
       matrix ppf l;
 (*    Format.fprintf ppf "}";*)
-    break ppf ()
+    break Line ppf "after tabular"
   | Label x -> mlabel ppf x
   | _ -> .
 
 and pp ppf = function
   | [] -> ()
-  | Break :: (Break :: _ as q) ->
-    pp ppf q
+  | Break a :: (Break b :: q) ->
+    pp ppf ( Break (max a b) :: q)
   | a :: q ->
     pp_elt ppf a; pp ppf q
 
@@ -295,7 +312,7 @@ let if_not_empty f x =
 
 let block_code_text t =
   let fragment = String.split_on_char '\n' t in
-  list_concat_map ~sep:Break ~f:(if_not_empty (fun x -> Txt { kind=Verbatim; words=[x]})) fragment
+  list_concat_map ~sep:(Break Line) ~f:(if_not_empty (fun x -> Txt { kind=Verbatim; words=[x]})) fragment
 
 let rec internalref
     ~resolve
@@ -315,7 +332,7 @@ and inline ~in_source ~resolve (l : Inline.t) =
   let one (t : Inline.one) =
     match t.desc with
     | Text _s -> assert false
-    | Linebreak -> [Break]
+    | Linebreak -> [Break Line]
     | Styled (style, c) ->
       [Style(style, inline ~in_source ~resolve c)]
     | Link (ext, c) ->
@@ -358,7 +375,7 @@ and inline ~in_source ~resolve (l : Inline.t) =
 
 let heading ~resolve (h : Heading.t) =
   let content = inline ~in_source:false ~resolve h.title in
-  Section { label=h.label; level=h.level; content }
+  [Section { label=h.label; level=h.level; content }; Break Aesthetic]
 
 let non_empty_block_code ~resolve c =
   let s = source (inline ~in_source:true ~resolve) c in
@@ -373,14 +390,14 @@ let rec block ~in_source ~resolve (l: Block.t)  =
     | Inline i ->
       inline ~in_source:false ~resolve i
     | Paragraph i ->
-      inline ~in_source:false ~resolve i @ [Break]
+      inline ~in_source:false ~resolve i @ if in_source then [] else [Break Paragraph]
     | List (typ, l) ->
       [List { typ; items = List.map (block ~in_source:false ~resolve) l }]
     | Description l ->
       [Description (List.map (fun (i,b) ->
           inline ~in_source ~resolve i,
           block ~resolve ~in_source b
-      ) l); Break]
+      ) l)]
 (*
 
       List.concat_map (fun (i,b) ->
@@ -391,7 +408,7 @@ let rec block ~in_source ~resolve (l: Block.t)  =
     | Raw_markup r ->
       raw_markup r
     | Verbatim s -> [Verbatim s]
-    | Source c -> non_empty_block_code ~resolve c @ if in_source then [] else [Break]
+    | Source c -> non_empty_block_code ~resolve c @ if in_source then [] else [Break Line]
   in
   list_concat_map l ~f:one
 
@@ -430,7 +447,7 @@ let documentedSrc ~resolve (t : DocumentedSrc.t) =
         let doc = [block ~resolve ~in_source:true dsrc.doc] in
         (content @ label dsrc.anchor ) :: doc
       in
-      Table (List.map one l) :: to_latex rest
+      Table (List.map one l) :: Break Line :: to_latex rest
   in
   to_latex t
 
@@ -464,7 +481,7 @@ let items ~resolve l =
       elts
       |> continue_with rest
     | Heading h :: rest ->
-      [heading ~resolve h]
+      heading ~resolve h
       |> continue_with rest
     | Subpage
         { kind=_; anchor; doc ; content = { summary; status=_; content } }
@@ -483,8 +500,7 @@ let items ~resolve l =
       let content =  label anchor @ documentedSrc ~resolve content in
       let elts = match doc with
         | [] -> content
-        | docs -> content @ Break :: block ~resolve ~in_source:true docs
-          (*[Description [content, block ~resolve docs]] *)
+        | docs -> content @ Break Line :: block ~resolve ~in_source:true docs @ [Break Paragraph]
       in
       continue_with rest elts
 
