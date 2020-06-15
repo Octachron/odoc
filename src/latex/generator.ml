@@ -19,7 +19,7 @@ type break_hierarchy =
   | Aesthetic
   | Line
   | Paragraph
-(*  | Separation *)
+  | Separation
 
 type elt =
   | Txt of { kind: text_kind; words: string list }
@@ -136,10 +136,10 @@ let mstyle = function
 let break level ppf motivation =
   let pre: _ format6 = match level with
     | Line -> {|\\|}
-(*    | Separation -> {|\\@,\vspace{0.2cm}|}*)
+    | Separation -> {|\medbreak|}
     | _ -> "" in
   let post: _ format6 = match level with
-    | Line (*| Separation*) | Aesthetic -> "@,"
+    | Line | Separation | Aesthetic -> "@,"
     | Paragraph -> "@,@," in
   Fmt.pf ppf (pre ^^ "%%" ^^ motivation ^^ post)
 
@@ -161,7 +161,6 @@ let env name pp ?(opts=[]) ?(args=[]) ppf content =
   pp ppf content;
   mend ppf name;
   break Aesthetic ppf "after env %s" name
-
 
 let inline_code = macro "inlinecode"
 let block_code = macro "blockcode"
@@ -192,10 +191,13 @@ let list kind pp ppf x =
 
 let description pp ppf x =
   let elt ppf (d,elt) = macro "item" ~options:[bind pp d] pp ppf elt in
-  env "description"
-    (Fmt.list ~sep:(fun ppf () -> break Aesthetic ppf "description") elt)
-    ppf
-    x
+  let all ppf x =
+    Format.fprintf ppf
+      {|\kern-\topsep
+\makeatletter\advance\%@topsepadd-\topsep\makeatother%% topsep is hardcoded
+|};
+    Fmt.list ~sep:(fun ppf () -> break Aesthetic ppf "description") elt ppf x in
+  env "description" all ppf x
 
 
 
@@ -500,7 +502,7 @@ let items ~resolve l =
       let content =  label anchor @ documentedSrc ~resolve content in
       let elts = match doc with
         | [] -> content
-        | docs -> content @ Break Line :: block ~resolve ~in_source:true docs @ [Break Paragraph]
+        | docs -> content @ Break Line :: block ~resolve ~in_source:true docs @ [Break Separation]
       in
       continue_with rest elts
 
