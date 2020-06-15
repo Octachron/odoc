@@ -29,7 +29,7 @@ type elt =
   | InlineCode of t
   | Break
   | List of { typ : Block.list_type; items: t list }
-(*  | Description of (t * t) list *)
+  | Description of (t * t) list
   | Table of t list list
 
 and t = elt list
@@ -168,9 +168,17 @@ let list kind pp ppf x =
     | Unordered -> env "itemize" in
   let elt ppf = macro "item" pp ppf in
   list
-    (Format.pp_print_list ~pp_sep:tbreak elt)
+    (Fmt.list ~sep:tbreak elt)
     ppf
     x
+
+let description pp ppf x =
+  let elt ppf (d,elt) = macro "item" ~options:[bind pp d] pp ppf elt in
+  env "description"
+    (Fmt.list ~sep:tbreak elt)
+    ppf
+    x
+
 
 
 let escape_entity  = function
@@ -204,6 +212,7 @@ let rec pp_elt ppf = function
   | BlockCode x -> block_code pp ppf x
   | InlineCode x -> inline_code pp ppf x
   | List {typ; items} -> list typ pp ppf items
+  | Description items -> description pp ppf items
 (*  | Description items ->
     (* let pair ppf (d,x) = macro "item" ~options:[bind pp d] pp ppf x in
     env "description"
@@ -368,10 +377,17 @@ let rec block ~in_source ~resolve (l: Block.t)  =
     | List (typ, l) ->
       [List { typ; items = List.map (block ~in_source:false ~resolve) l }]
     | Description l ->
+      [Description (List.map (fun (i,b) ->
+          inline ~in_source ~resolve i,
+          block ~resolve ~in_source b
+      ) l); Break]
+(*
+
       List.concat_map (fun (i,b) ->
           let i = inline ~in_source:true ~resolve i in
           i @ Break :: block ~resolve ~in_source:true b
         ) l
+*)
     | Raw_markup r ->
       raw_markup r
     | Verbatim s -> [Verbatim s]
