@@ -150,11 +150,10 @@ let block_code = macro "blockcode"
 
 
 let level_macro = function
-  | 0 -> (fun x -> macro "section" x)
-  | 1 -> (fun x -> macro "subsection" x)
-  | 2 -> (fun x -> macro "subsubsection" x)
-  | 3 | _ -> fun pp ppf x ->
-    macro "paragraph" ~options:[bind pp x] (fun _ () -> ()) ppf ()
+  | 0 ->  macro "section"
+  | 1 -> macro "subsection"
+  | 2 -> macro "subsubsection"
+  | 3 | _ -> macro "paragraph"
 
 
 let _space ppf () = Format.fprintf ppf " "
