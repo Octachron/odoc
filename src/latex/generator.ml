@@ -493,9 +493,9 @@ let items ~resolve l =
         | Page p -> items p.items
       in
       let docs = block ~resolve ~in_source:true  doc in
-      let _summary = source (inline ~in_source:true ~resolve) summary in
+      let summary = source (inline ~in_source:true ~resolve) summary in
       let content = included in
-      (label anchor @ docs @ content)
+      (label anchor @ docs @ summary @ content)
       |> continue_with rest
 
     | Declaration {Item. kind=_; anchor ; content ; doc} :: rest ->
@@ -521,7 +521,12 @@ module Doc = struct
   let page_creator ?head content =
     { header=head; content = content }
 
-let make ?head filename content children =
+let make ?head url filename content children =
+  let label = Label (Format.asprintf "%a" Link.flatten_path url ^ "-") in
+  let content = match content with
+    | [] -> [label]
+    | Section _ as s  :: q -> s :: label :: q
+    | q -> label :: q in
   let doc = page_creator ?head content in
   let content ppf = pp ppf doc in
   {Odoc_document.Renderer. filename; content; children }
@@ -541,14 +546,14 @@ module Page = struct
   and subpages  ?theme_uri i =
     list_concat_map ~f:(subpage ?theme_uri) @@ Doctree.Subpages.compute i
 
-  and page ?theme_uri ({Page. title; header; items = i; url=_ } as p) =
+  and page ?theme_uri ({Page. title; header; items = i; url } as p) =
     let resolve = () in
     let i = Doctree.Shift.compute ~on_sub i in
     let subpages = subpages ?theme_uri p in
     let header = items ~resolve header in
     let content = items ~resolve i in
     let page =
-      Doc.make title (header@content) subpages
+      Doc.make url title (header@content) subpages
     in
     page
 

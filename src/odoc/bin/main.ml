@@ -340,7 +340,7 @@ module Odoc_latex : sig
   val info: Term.info
 end = struct
 
-  let manpage directories output_dir syntax input_file =
+  let latex directories output_dir syntax input_file =
     let env = Env.create ~important_digests:false ~directories in
     let file = Fs.File.of_string input_file in
     Latex.from_odoc ~env ~syntax ~output:output_dir file
@@ -356,7 +356,7 @@ end = struct
       in
       Arg.(value & opt (pconv convert_syntax) (Odoc_document.Renderer.OCaml) @@ info ~docv:"SYNTAX" ~doc ~env ["syntax"])
     in
-    Term.(const handle_error $ (const manpage $
+    Term.(const handle_error $ (const latex $
           odoc_file_directories $ dst ~create:true () $
           syntax $
           input))

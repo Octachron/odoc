@@ -5,20 +5,26 @@ postmodules=atomic seq option result bool char uchar sys list bytes string unit 
 
 modules = $(premodules) $(postmodules)
 
-odoc=dune exec ../../../odoc/bin/main.exe
+odoc=dune exec ../src/odoc/bin/main.exe
 
 latex_files = $(addprefix output/,$(addsuffix .tex, $(modules)))
+html_files = $(addprefix output/,$(addsuffix .html, $(modules)))
 
-odoc = ../../../../_build/default/src/odoc/bin/main.exe
+odoc = ../_build/default/src/odoc/bin/main.exe
 
-all: glue.pdf
+all: pre glue.pdf
+
+.PHONY: html
+html:  $(html_files)
+
+
 
 .PHONY: pre
 pre:
-	dune build ../../../odoc/bin/main.exe
+	dune build ../src/odoc/bin/main.exe
 
 
-glue.pdf: $(latex_files)
+glue.pdf: $(latex_files) pre
 	pdflatex glue.tex
 
 
@@ -40,6 +46,9 @@ $(addsuffix .odoc, $(modules)):%.odoc: %.cmti
 
 $(latex_files):output/%.tex: %.odoc
 	  $(odoc) latex --output-dir . $<
+
+$(html_files):output/%.html: %.odoc
+	  $(odoc) html --output-dir . $<
 
 clean:
 	rm *.cmti
