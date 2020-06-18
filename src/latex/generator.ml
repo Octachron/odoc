@@ -501,7 +501,7 @@ let items ~resolve l =
     | Declaration {Item. kind=_; anchor ; content ; doc} :: rest ->
       let content =  label anchor @ documentedSrc ~resolve content in
       let elts = match doc with
-        | [] -> content
+        | [] -> content @ [Break Line]
         | docs -> content @ Break Line :: block ~resolve ~in_source:true docs @ [Break Separation]
       in
       continue_with rest elts
