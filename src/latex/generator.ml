@@ -187,17 +187,6 @@ let break level ppf motivation =
     | Aesthetic | Line | Separation -> pre ^^ "%%" ^^ motivation ^^ post in
   Fmt.pf ppf fmt
 
-(*
-let break ppf motivation = Format.fprintf ppf ({|\\%%|} ^^ motivation ^^ "@,")
-let pbreak ppf motivation = Format.fprintf ppf ({|%%|} ^^ motivation ^^ "@,@,")
-
-let _vbreak motivation ppf space =
-  let () = pbreak ppf motivation in
-  macro "vspace" Format.pp_print_string ppf space
-let tbreak ppf motivation = Format.fprintf ppf ("%%" ^^ motivation ^^ "@,")
-*)
-
-
 let env name pp ?(with_break=false) ?(opts=[]) ?(args=[]) ppf content =
   mbegin ppf name;
   Format.pp_print_list (fun ppf pp -> Format.fprintf ppf "[%t]" pp) ppf opts;
@@ -247,7 +236,7 @@ let description pp ppf x =
 
 let escape_entity  = function
   | "#45" -> "-"
-  | "gt" -> ">"
+  | "gt" -> "\\gt"
   | "#8288" -> ""
   | s -> s
 
@@ -286,6 +275,7 @@ let rec pp_elt ppf = function
     let matrix ppf m = List.iter (row ppf) m in
     let rec repeat n s ppf = if n = 0 then () else
         Format.fprintf ppf "%t%t" s (repeat (n - 1) s) in
+    (* We are using pbox to be able to nest lists inside the tables *)
     let frac ppf = Format.fprintf ppf " p{%.2f\\linewidth} " (1. /. float columns) in
     break Line ppf "before tabular";
     env "tabular"
@@ -339,9 +329,6 @@ let source k (t : Source.t) =
   in
   tokens t
 
-(* let if_not_empty f x =
-  if x = "" then [] else [f x]
-*)
 
 let rec internalref
     ~resolve
@@ -388,11 +375,6 @@ and inline ~in_source ~resolve (l : Inline.t) =
       text @ prettify rest
     | o :: q -> one o @ prettify q
     | [] -> [] in
-
-(*as t :: { desc = Inline.Entity e; _ } :: q ->
-      prettify ({ t with desc = Inline.Text (x ^ escape_entity e) } :: q)
-    | { desc = Inline.Entity  e; _ } as a :: q ->
-      prettify ({ a with desc = Inline.Text (escape_entity e) } :: q) *)
   prettify l
 
 let heading ~resolve (h : Heading.t) =
@@ -420,14 +402,7 @@ let rec block ~in_source ~resolve (l: Block.t)  =
           inline ~in_source ~resolve i,
           block ~resolve ~in_source b
       ) l)]
-(*
-
-      List.concat_map (fun (i,b) ->
-          let i = inline ~in_source:true ~resolve i in
-          i @ Break :: block ~resolve ~in_source:true b
-        ) l
-*)
-    | Raw_markup r ->
+   | Raw_markup r ->
       raw_markup r
     | Verbatim s -> [Verbatim s]
     | Source c -> non_empty_block_code ~resolve c @ if in_source then [] else [Break Separation]
