@@ -331,36 +331,33 @@ let source k (t : Source.t) =
   tokens t
 
 
-let rec internalref
-  ~in_source
-  ~resolve
-  (t : InternalLink.t) =
+let rec internalref ~in_source (t : InternalLink.t) =
   match t with
   | Resolved (uri, content) ->
     let target = Link.label uri in
-    let content = Some (inline ~in_source ~resolve content) in
+    let content = Some (inline ~in_source content) in
     let short = in_source in
     Internal_ref { short; content; target }
   | Unresolved content ->
     let target = "xref-unresolved" in
-    let content = Some (inline ~in_source ~resolve content) in
+    let content = Some (inline ~in_source content) in
     let short = in_source in
     Internal_ref { short; target; content }
 
-and inline ~in_source ~resolve (l : Inline.t) =
+and inline ~in_source (l : Inline.t) =
   let one (t : Inline.one) =
     match t.desc with
     | Text _s -> assert false
     | Linebreak -> [Break Line]
     | Styled (style, c) ->
-      [Style(style, inline ~in_source ~resolve c)]
+      [Style(style, inline ~in_source c)]
     | Link (ext, c) ->
-      let content = inline ~resolve ~in_source:false  c in
+      let content = inline ~in_source:false  c in
       [External_ref(ext, Some content)]
     | InternalLink c ->
-      [internalref ~in_source ~resolve c]
+      [internalref ~in_source c]
     | Source c ->
-      [InlineCode (source (inline ~resolve ~in_source:true) c)]
+      [InlineCode (source (inline ~in_source:true) c)]
     | Raw_markup r -> raw_markup r
     | Entity s -> [Txt { kind=if in_source then Verbatim else Textual; words = [escape_entity s]}] in
 
@@ -384,40 +381,40 @@ and inline ~in_source ~resolve (l : Inline.t) =
     | [] -> [] in
   prettify l
 
-let heading ~resolve (h : Heading.t) =
-  let content = inline ~in_source:false ~resolve h.title in
+let heading (h : Heading.t) =
+  let content = inline ~in_source:false h.title in
   [Section { label=h.label; level=h.level; content }; Break Aesthetic]
 
-let non_empty_block_code ~resolve c =
-  let s = source (inline ~in_source:true ~resolve) c in
+let non_empty_block_code c =
+  let s = source (inline ~in_source:true) c in
   match s with
   | [] -> []
   | _ :: _ as l -> [BlockCode l]
 
 
-let rec block ~in_source ~resolve (l: Block.t)  =
+let rec block ~in_source (l: Block.t)  =
   let one (t : Block.one) =
     match t.desc with
     | Inline i ->
-      inline ~in_source:false ~resolve i
+      inline ~in_source:false i
     | Paragraph i ->
-      inline ~in_source:false ~resolve i @ if in_source then [] else [Break Paragraph]
+      inline ~in_source:false i @ if in_source then [] else [Break Paragraph]
     | List (typ, l) ->
-      [List { typ; items = List.map (block ~in_source:false ~resolve) l }]
+      [List { typ; items = List.map (block ~in_source:false) l }]
     | Description l ->
       [Description (List.map (fun (i,b) ->
-          inline ~in_source ~resolve i,
-          block ~resolve ~in_source b
+          inline ~in_source i,
+          block ~in_source b
       ) l)]
    | Raw_markup r ->
       raw_markup r
     | Verbatim s -> [Verbatim s]
-    | Source c -> non_empty_block_code ~resolve c @ if in_source then [] else [Break Separation]
+    | Source c -> non_empty_block_code c @ if in_source then [] else [Break Separation]
   in
   list_concat_map l ~f:one
 
 
-let documentedSrc ~resolve (t : DocumentedSrc.t) =
+let documentedSrc (t : DocumentedSrc.t) =
   let open DocumentedSrc in
   let take_code l =
     Doctree.Take.until l ~classify:(function
@@ -439,16 +436,16 @@ let documentedSrc ~resolve (t : DocumentedSrc.t) =
     | [] -> []
     | (Code _ | Subpage _) :: _ ->
       let code, _, rest = take_code t in
-      non_empty_block_code ~resolve code
+      non_empty_block_code code
       @ to_latex rest
     | (Documented _ | Nested _) :: _ ->
       let l, _, rest = take_descr t in
       let one dsrc =
         let content = match dsrc.code with
-          | `D code -> inline ~in_source:true ~resolve code
+          | `D code -> inline ~in_source:true code
           | `N n -> to_latex n
         in
-        let doc = [block ~resolve ~in_source:true dsrc.doc] in
+        let doc = [block ~in_source:true dsrc.doc] in
         (content @ label dsrc.anchor ) :: doc
       in
       Table (List.map one l) :: Break Line :: to_latex rest
@@ -467,7 +464,7 @@ let rec is_only_text l =
   in
   List.for_all is_text l
 
-let items ~resolve l =
+let items l =
   let[@tailrec] rec walk_items
       ~only_text acc (t : Item.t list) =
     let continue_with rest elts =
@@ -480,12 +477,12 @@ let items ~resolve l =
         | Item.Text text -> Accum text
         | _ -> Stop_and_keep)
       in
-      let content = block ~resolve ~in_source:false text in
+      let content = block ~in_source:false text in
       let elts = content in
       elts
       |> continue_with rest
     | Heading h :: rest ->
-      heading ~resolve h
+      heading h
       |> continue_with rest
     | Subpage
         { kind=_; anchor; doc ; content = { summary; status=_; content } }
@@ -494,17 +491,17 @@ let items ~resolve l =
         | Items i -> items i
         | Page p -> items p.items
       in
-      let docs = block ~resolve ~in_source:true  doc in
-      let summary = source (inline ~in_source:true ~resolve) summary in
+      let docs = block ~in_source:true  doc in
+      let summary = source (inline ~in_source:true) summary in
       let content = included in
       (label anchor @ docs @ summary @ content)
       |> continue_with rest
 
     | Declaration {Item. kind=_; anchor ; content ; doc} :: rest ->
-      let content =  label anchor @ documentedSrc ~resolve content in
+      let content =  label anchor @ documentedSrc content in
       let elts = match doc with
         | [] -> content @ [Break Line]
-        | docs -> content @ Break Line :: block ~resolve ~in_source:true docs @ [Break Separation]
+        | docs -> content @ Break Line :: block ~in_source:true docs @ [Break Separation]
       in
       continue_with rest elts
 
@@ -549,11 +546,10 @@ module Page = struct
     list_concat_map ~f:(subpage ?theme_uri) @@ Doctree.Subpages.compute i
 
   and page ?theme_uri ({Page. title; header; items = i; url } as p) =
-    let resolve = () in
     let i = Doctree.Shift.compute ~on_sub i in
     let subpages = subpages ?theme_uri p in
-    let header = items ~resolve header in
-    let content = items ~resolve i in
+    let header = items header in
+    let content = items i in
     let page =
       Doc.make url title (header@content) subpages
     in
