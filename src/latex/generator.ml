@@ -305,15 +305,6 @@ and href ppf (l,txt) =
     Format.fprintf ppf {|\href{%s}{%a}|} l pp txt
   | None -> Format.fprintf ppf {|\url{%s}|} l
 
-type package = { name:string; options:string list }
-type header = {
-  packages: package list;
-  kind: string;
-  options: string list
-}
-type doc = { header: header option; content: t }
-
-
 let raw_markup (t:Raw_markup.t) =
   match t with
   | `Latex, c -> [Raw c]
@@ -511,23 +502,13 @@ let items l =
 
 module Doc = struct
 
-  let hyperref = {name="hyperref"; options=[]}
-  let _default_header = { packages = [hyperref] ; kind="article"; options = [] }
-
-  let pp ppf x =
-    Format.fprintf ppf "@[<v>%a@]@." pp x.content
-
-  let page_creator ?head content =
-    { header=head; content = content }
-
-let make ?head url filename content children =
+let make  url filename content children =
   let label = Label (Link.page url) in
   let content = match content with
     | [] -> [label]
     | Section _ as s  :: q -> s :: label :: q
     | q -> label :: q in
-  let doc = page_creator ?head content in
-  let content ppf = pp ppf doc in
+  let content ppf = Format.fprintf ppf "@[<v>%a@]@." pp content in
   {Odoc_document.Renderer. filename; content; children }
 end
 
@@ -535,19 +516,19 @@ module Page = struct
 
   let on_sub (subp : Subpage.t) = match subp.status with
     | `Closed | `Open | `Default -> None
-    | `Inline -> Some 0
+    | `Inline -> Some 1
 
-  let rec subpage ?theme_uri {Subpage. content ; _} =
+  let rec subpage {Subpage. content ; _} =
     match content with
-    | Page p -> [page ?theme_uri p]
+    | Page p -> [page p]
     | Items _ -> []
 
-  and subpages  ?theme_uri i =
-    list_concat_map ~f:(subpage ?theme_uri) @@ Doctree.Subpages.compute i
+  and subpages i =
+    list_concat_map ~f:subpage @@ Doctree.Subpages.compute i
 
-  and page ?theme_uri ({Page. title; header; items = i; url } as p) =
+  and page ({Page. title; header; items = i; url } as p) =
     let i = Doctree.Shift.compute ~on_sub i in
-    let subpages = subpages ?theme_uri p in
+    let subpages = subpages p in
     let header = items header in
     let content = items i in
     let page =
@@ -557,4 +538,4 @@ module Page = struct
 
 end
 
-let render ?theme_uri page = Page.page ?theme_uri page
+let render page = Page.page page
