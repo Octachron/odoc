@@ -17,6 +17,7 @@ type text_kind = Verbatim | Textual
 
 type break_hierarchy =
   | Aesthetic
+  | Simple
   | Line
   | Paragraph
   | Separation
@@ -78,6 +79,42 @@ let escape_text =
     Buffer.reset b;
     Fmt.string ppf s
 
+let escape_verbatim_text =
+  let b = Buffer.create 17 in
+  fun ppf s ->
+    let rec normal i =
+      if i = String.length s then () else
+      match s.[i] with
+      | '{' ->  Buffer.add_string b "\\{"                 ; normal (i+1)
+      | '}' ->  Buffer.add_string b "\\}"                 ; normal (i+1)
+      | '\\' -> Buffer.add_string b "\\textbackslash{}"   ; normal (i+1)
+      | '%' ->  Buffer.add_string b "\\%"                 ; normal (i+1)
+      | '~' ->  Buffer.add_string b "\\textasciitilde{}"  ; normal (i+1)
+      | '^' ->  Buffer.add_string b "\\textasciicircum{}" ; normal (i+1)
+      | '_' ->  Buffer.add_string b "\\_"                 ; normal (i+1)
+      | '&' ->  Buffer.add_string b "\\&"                 ; normal (i+1)
+      | '#' ->  Buffer.add_string b "\\#"                 ; normal (i+1)
+      | '$' ->  Buffer.add_string b "\\$"                 ; normal (i+1)
+
+      | '\n' -> Buffer.add_string b "\\\\\n"              ; after_newline (i+1)
+
+      | c ->  Buffer.add_char b c                         ; normal (i+1)
+    and after_newline i =
+      if i = String.length s then () else
+        match s.[i] with
+        | ' ' -> Buffer.add_string b {|\-|}; indent (i+1)
+        | _ -> normal i
+    and indent i =
+      if i = String.length s then () else
+        match s.[i] with
+        | ' ' -> Buffer.add_string  b {|\ |}; indent (i+1)
+        | _ -> normal i in
+    let () = normal 0 in
+    let s = Buffer.contents b in
+    Buffer.reset b;
+    Fmt.string ppf s
+
+
 
 
 let escape_ref ppf s =
@@ -94,6 +131,11 @@ module Link = struct
   let rec flatten_path ppf (x: Odoc_document.Url.Path.t) = match x.parent with
     | Some p -> Format.fprintf ppf "%a-%s-%s" flatten_path p x.kind x.name
     | None -> Format.fprintf ppf "%s-%s" x.kind x.name
+
+ let page p =
+   Format.asprintf "%a-"
+     flatten_path p
+
 
  let label (x:Odoc_document.Url.t) =
    Format.asprintf "%a-%s"
@@ -116,8 +158,7 @@ let mhyperref ref x =
   | s -> macro "hyperref" ~options:[bind escape_ref s] x
 
 
-let texttt ppf s =
-    macro "texttt" escape_text ppf s
+let texttt ppf s = escape_verbatim_text ppf s
 
 let label = function
   | None -> []
@@ -139,9 +180,12 @@ let break level ppf motivation =
     | Separation -> {|\medbreak|}
     | _ -> "" in
   let post: _ format6 = match level with
-    | Line | Separation | Aesthetic -> "@,"
+    | Line | Separation | Aesthetic | Simple -> "@,"
     | Paragraph -> "@,@," in
-  Fmt.pf ppf (pre ^^ "%%" ^^ motivation ^^ post)
+  let fmt : _ format6 = match level with
+    | Simple | Paragraph -> pre ^^ post ^^ "%%" ^^ motivation ^^ "@," (* "\n%Comment\n" *)
+    | Aesthetic | Line | Separation -> pre ^^ "%%" ^^ motivation ^^ post in
+  Fmt.pf ppf fmt
 
 (*
 let break ppf motivation = Format.fprintf ppf ({|\\%%|} ^^ motivation ^^ "@,")
@@ -154,13 +198,13 @@ let tbreak ppf motivation = Format.fprintf ppf ("%%" ^^ motivation ^^ "@,")
 *)
 
 
-let env name pp ?(opts=[]) ?(args=[]) ppf content =
+let env name pp ?(with_break=false) ?(opts=[]) ?(args=[]) ppf content =
   mbegin ppf name;
   Format.pp_print_list (fun ppf pp -> Format.fprintf ppf "[%t]" pp) ppf opts;
   Format.pp_print_list (fun ppf pp -> Format.fprintf ppf "{%t}" pp) ppf args;
   pp ppf content;
   mend ppf name;
-  break Aesthetic ppf "after env %s" name
+  break (if with_break then Simple else Aesthetic) ppf "after env %s" name
 
 let inline_code = macro "inlinecode"
 let block_code = macro "blockcode"
@@ -222,7 +266,7 @@ let rec pp_elt ppf = function
     level_macro level with_label ppf (label,content)
   | Break lvl -> break lvl ppf "elt"
   | Raw s -> str ppf s
-  | Tag (x,t) -> env x pp ppf t
+  | Tag (x,t) -> env ~with_break:true x pp ppf t
   | Verbatim s -> verbatim ppf s
   | Internal_ref (l,x) -> hyperref ppf (l,x)
   | External_ref (l,x) -> href ppf (l,x)
@@ -232,18 +276,6 @@ let rec pp_elt ppf = function
   | InlineCode x -> inline_code pp ppf x
   | List {typ; items} -> list typ pp ppf items
   | Description items -> description pp ppf items
-(*  | Description items ->
-    (* let pair ppf (d,x) = macro "item" ~options:[bind pp d] pp ppf x in
-    env "description"
-      (Format.pp_print_list ~pp_sep:space pair)
-      ppf items *)
-    let pair ppf (d,x) =
-      Format.fprintf ppf "%a%a%a" pp d break () pp x in
-    Format.fprintf ppf "%a%a%a"
-      vbreak "0.2cm"
-      (Format.pp_print_list pair) items
-      vbreak "0.2cm"
-*)
   | Table [] -> ()
   | Table (a  :: _ as l) ->
     let columns = List.length a in
@@ -255,12 +287,10 @@ let rec pp_elt ppf = function
     let rec repeat n s ppf = if n = 0 then () else
         Format.fprintf ppf "%t%t" s (repeat (n - 1) s) in
     let frac ppf = Format.fprintf ppf " p{%.2f\\linewidth} " (1. /. float columns) in
-(*    Format.fprintf ppf "{";*)
     break Line ppf "before tabular";
     env "tabular"
-      ~args:[(*Format.dprintf {|\linewidth|};*) repeat columns frac  ]
+      ~args:[ repeat columns frac  ]
       matrix ppf l;
-(*    Format.fprintf ppf "}";*)
     break Line ppf "after tabular"
   | Label x -> mlabel ppf x
   | _ -> .
@@ -309,12 +339,9 @@ let source k (t : Source.t) =
   in
   tokens t
 
-let if_not_empty f x =
+(* let if_not_empty f x =
   if x = "" then [] else [f x]
-
-let block_code_text t =
-  let fragment = String.split_on_char '\n' t in
-  list_concat_map ~sep:(Break Line) ~f:(if_not_empty (fun x -> Txt { kind=Verbatim; words=[x]})) fragment
+*)
 
 let rec internalref
     ~resolve
@@ -324,10 +351,6 @@ let rec internalref
     let href = Link.label uri in
     Internal_ref(href, Some (inline ~in_source:false ~resolve content))
   | Unresolved content ->
-    (* let title =
-     *   Html.a_title (Printf.sprintf "unresolved reference to %S"
-     *       (ref_to_string ref)
-     * in *)
     Internal_ref("xref-unresolved", Some(inline ~in_source:false ~resolve content))
 
 and inline ~in_source ~resolve (l : Inline.t) =
@@ -359,9 +382,6 @@ and inline ~in_source ~resolve (l : Inline.t) =
     | { Inline.desc = Inline.Text _; _ } :: _ as l ->
       let words, _, rest = take_text l in
       let text =
-        if in_source then
-          List.concat_map  block_code_text words
-        else
           let words = List.filter (( <> ) "" ) words in
           [Txt { kind = if in_source then Verbatim else Textual; words }]
       in
@@ -410,7 +430,7 @@ let rec block ~in_source ~resolve (l: Block.t)  =
     | Raw_markup r ->
       raw_markup r
     | Verbatim s -> [Verbatim s]
-    | Source c -> non_empty_block_code ~resolve c @ if in_source then [] else [Break Line]
+    | Source c -> non_empty_block_code ~resolve c @ if in_source then [] else [Break Separation]
   in
   list_concat_map l ~f:one
 
@@ -522,7 +542,7 @@ module Doc = struct
     { header=head; content = content }
 
 let make ?head url filename content children =
-  let label = Label (Format.asprintf "%a" Link.flatten_path url ^ "-") in
+  let label = Label (Link.page url) in
   let content = match content with
     | [] -> [label]
     | Section _ as s  :: q -> s :: label :: q
