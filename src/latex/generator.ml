@@ -22,11 +22,12 @@ type break_hierarchy =
   | Paragraph
   | Separation
 
+
 type elt =
   | Txt of { kind: text_kind; words: string list }
   | Section of {level:int; label:string option; content:t }
   | Verbatim of string
-  | Internal_ref of string * t option
+  | Internal_ref of reference
   | External_ref of string * t option
   | Label of string
   | Raw of string
@@ -40,6 +41,7 @@ type elt =
   | Table of t list list
 
 and t = elt list
+and reference = { short:bool; target:string; content: t option }
 
 
 
@@ -149,11 +151,17 @@ let mlabel ppf = macro "label" escape_ref ppf
 let verbatim = macro "verbatim" str
 let mbegin ?options = macro "begin" ?options str
 let mend = macro "end" str
-let mhyperref ref x =
-  (* {|\hyperref[%a]{%a\ref*{%a}}|} *)
-  match ref with
-  | "" ->  x
-  | s -> macro "hyperref" ~options:[bind escape_ref s] x
+let mhyperref pp r ppf =
+  match r.target, r.content with
+  | "", None -> ()
+  | "", Some content ->  pp ppf content
+  | s, None ->
+    macro "ref" escape_ref ppf s
+  | s, Some content ->
+      let pp =
+        if r.short then pp else
+          fun ppf x -> Fmt.pf ppf "%a[%a]" pp x (macro "ref*" escape_ref) s in
+      macro "hyperref" ~options:[bind escape_ref s] pp ppf content
 
 
 let texttt ppf s = escape_verbatim_text ppf s
@@ -231,7 +239,6 @@ let description pp ppf x =
   env "description" all ppf x
 
 
-
 let escape_entity  = function
   | "#45" -> "-"
   | "gt" -> ">"
@@ -255,7 +262,7 @@ let rec pp_elt ppf = function
   | Raw s -> str ppf s
   | Tag (x,t) -> env ~with_break:true x pp ppf t
   | Verbatim s -> verbatim ppf s
-  | Internal_ref (l,x) -> hyperref ppf (l,x)
+  | Internal_ref r -> hyperref ppf r
   | External_ref (l,x) -> href ppf (l,x)
   | Style (s,x) -> mstyle s pp ppf x
   | BlockCode [] -> ()
@@ -290,11 +297,7 @@ and pp ppf = function
   | a :: q ->
     pp_elt ppf a; pp ppf q
 
-and hyperref ppf (l,t) =
-  match t with
-  | None ->
-    macro "ref" str ppf l
-  | Some txt -> mhyperref l pp ppf txt
+and hyperref ppf r = mhyperref pp r ppf
 
 and href ppf (l,txt) =
   match txt with
@@ -329,14 +332,20 @@ let source k (t : Source.t) =
 
 
 let rec internalref
-    ~resolve
-    (t : InternalLink.t) =
+  ~in_source
+  ~resolve
+  (t : InternalLink.t) =
   match t with
   | Resolved (uri, content) ->
-    let href = Link.label uri in
-    Internal_ref(href, Some (inline ~in_source:false ~resolve content))
+    let target = Link.label uri in
+    let content = Some (inline ~in_source ~resolve content) in
+    let short = in_source in
+    Internal_ref { short; content; target }
   | Unresolved content ->
-    Internal_ref("xref-unresolved", Some(inline ~in_source:false ~resolve content))
+    let target = "xref-unresolved" in
+    let content = Some (inline ~in_source ~resolve content) in
+    let short = in_source in
+    Internal_ref { short; target; content }
 
 and inline ~in_source ~resolve (l : Inline.t) =
   let one (t : Inline.one) =
@@ -349,7 +358,7 @@ and inline ~in_source ~resolve (l : Inline.t) =
       let content = inline ~resolve ~in_source:false  c in
       [External_ref(ext, Some content)]
     | InternalLink c ->
-      [internalref ~resolve c]
+      [internalref ~in_source ~resolve c]
     | Source c ->
       [InlineCode (source (inline ~resolve ~in_source:true) c)]
     | Raw_markup r -> raw_markup r
