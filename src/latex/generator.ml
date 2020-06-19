@@ -115,14 +115,12 @@ let escape_verbatim_text =
     Fmt.string ppf s
 
 
-
-
 let escape_ref ppf s =
   for i = 0 to String.length s - 1 do
     match s.[i] with
-    | '~' -> Format.fprintf ppf "---"
-    | '_' -> Format.fprintf ppf "+"
-    | '+' -> Format.fprintf ppf "++"
+    | '~' -> Format.fprintf ppf "+t+"
+    | '_' -> Format.fprintf ppf "+u+"
+    | '+' -> Format.fprintf ppf "+++"
     | c -> Format.fprintf ppf "%c" c
   done
 
@@ -236,7 +234,7 @@ let description pp ppf x =
 
 let escape_entity  = function
   | "#45" -> "-"
-  | "gt" -> "\\gt"
+  | "gt" -> ">"
   | "#8288" -> ""
   | s -> s
 
