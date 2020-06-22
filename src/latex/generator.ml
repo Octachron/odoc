@@ -386,11 +386,13 @@ let heading (h : Heading.t) =
   let content = inline ~in_source:false h.title in
   [Section { label=h.label; level=h.level; content }; Break Aesthetic]
 
-let non_empty_block_code c =
+let non_empty_block_code ~in_source c =
   let s = source (inline ~in_source:true) c in
   match s with
   | [] -> []
-  | _ :: _ as l -> [BlockCode l]
+  | _ :: _ as l ->
+    if in_source then [BlockCode l] else [Break Separation; BlockCode l; Break Separation]
+
 
 
 let rec block ~in_source (l: Block.t)  =
@@ -410,7 +412,7 @@ let rec block ~in_source (l: Block.t)  =
    | Raw_markup r ->
       raw_markup r
     | Verbatim s -> [Verbatim s]
-    | Source c -> non_empty_block_code c @ if in_source then [] else [Break Separation]
+    | Source c -> non_empty_block_code ~in_source c
   in
   list_concat_map l ~f:one
 
@@ -437,7 +439,7 @@ let documentedSrc (t : DocumentedSrc.t) =
     | [] -> []
     | (Code _ | Subpage _) :: _ ->
       let code, _, rest = take_code t in
-      non_empty_block_code code
+      non_empty_block_code code ~in_source:true
       @ to_latex rest
     | (Documented _ | Nested _) :: _ ->
       let l, _, rest = take_descr t in
