@@ -245,6 +245,16 @@ let escape_entity  = function
   | "#8288" -> ""
   | s -> s
 
+let elide_table = function
+  | [] -> []
+  | a :: _ as m ->
+    let start = List.map (fun _ -> false) a in
+    let is_content = function [] -> false | _ :: _ -> true in
+    let row mask l = List.map2 (fun x y -> x || is_content y) mask l in
+    let mask = List.fold_left row start m in
+    let filter_row row = List.filter_map (fun x -> x) @@ List.map2 (fun b x -> if b then Some x else None) mask row in
+    List.map filter_row m
+
 let rec pp_elt ppf = function
   | Txt { kind; words } ->
     let word_printer = match kind with
@@ -439,7 +449,7 @@ let documentedSrc (t : DocumentedSrc.t) =
         let doc = [block ~in_source:true dsrc.doc] in
         (content @ label dsrc.anchor ) :: doc
       in
-      Table (List.map one l) :: Break Line :: to_latex rest
+      Table (elide_table @@ List.map one l) :: Break Line :: to_latex rest
   in
   to_latex t
 
