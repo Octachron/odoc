@@ -69,11 +69,18 @@ let path_to_id path =
   | Error _ -> None
   | Ok url -> Some url
 
-let attach_expansion ?(status=`Default) page text = match page with
-  | None -> O.documentedSrc text
-  | Some content ->
+let attach_expansion ?(status=`Default) (eq, o, e) page text =
+  match page with
+  | None -> O.documentedSrc (text)
+  | Some (page : Page.t) ->
+    let url = page.url in
     let summary = O.render text in
-    DocumentedSrc.[Alternative (Expansion{ summary; url = content.url;  expansion =[DocumentedSrc.Subpage { content ; status }] })]
+    let expansion =
+      O.documentedSrc (O.txt eq ++ O.txt o)
+      @ DocumentedSrc.[Subpage { status ; content = page }]
+      @ O.documentedSrc (O.txt e)
+    in
+    DocumentedSrc.[Alternative (Expansion { summary; url ; expansion })]
 
 include Generator_signatures
 
@@ -1044,8 +1051,10 @@ struct
         O.documentedSrc @@ path url [inline @@ Text name],
         Some page
     in
-    let cd = attach_expansion expansion
-        (O.txt Syntax.Type.annotation_separator ++ class_decl t.type_)
+    let summary = O.txt Syntax.Type.annotation_separator ++ class_decl t.type_ in
+    let cd =
+      attach_expansion
+        (Syntax.Type.annotation_separator,"class","end") expansion summary
     in
     let content =
       let open Lang.Signature in
@@ -1088,7 +1097,9 @@ struct
         Some page
     in
     let expr =
-      attach_expansion expansion (O.txt " = " ++ class_type_expr t.expr)
+      attach_expansion
+        (" = ","class","end")
+        expansion (class_type_expr t.expr)
     in
     let content =
       let open Lang.Signature in
@@ -1293,12 +1304,16 @@ struct
           let page = {Page.items ; title ; header ; url } in
           O.documentedSrc link, Some page
       in
-      let modexpr =
-        attach_expansion expansion @@
+      let summary =
         module_decl (t.id :> Paths.Identifier.Signature.t)
           (match t.display_type with
             | None -> t.type_
             | Some t -> t)
+      in
+      let modexpr =
+        attach_expansion
+          (Syntax.Type.annotation_separator,"module","end")
+          expansion summary
       in
       let content =
         let keyword' =
@@ -1371,12 +1386,14 @@ struct
         let page = {Page.items ; title ; header ; url } in
         O.documentedSrc link, Some page
     in
-    let mty =
-      attach_expansion expansion @@
+    let summary =
       match t.expr with
       | None -> O.noop
       | Some expr ->
         O.txt " = " ++ mty (t.id :> Paths.Identifier.Signature.t) expr
+    in
+    let mty =
+      attach_expansion (" = ","module type","end") expansion summary
     in
     let content =
       O.documentedSrc (
