@@ -472,23 +472,13 @@ let rec documentedSrc (l : DocumentedSrc.t) = match l with
       ++ break_if_nonempty rest
       ++ continue rest
 
-and subpage { title = _; header = _ ; items; url } =
+and subpage { title = _; header = _ ; items; url = _ } =
   let content = items in
   let surround body =
-    let mk sep s1 s2 =
-      if content = [] then
-        sp ++ str sep ++ sp ++ font "CB" (str s1) ++ sp ++ font "CB" (str s2)
-      else
-        indent 2 (sp ++ str sep ++ sp ++ font "CB" (str s1) ++ break ++ body)
-        ++ break
-        ++ font "CB" (str s2)
-    in
-    match url.kind with
-    | "module" | "argument" -> mk ":" "sig" "end"
-    | "module-type"         -> mk "=" "sig" "end"
-    | "class"               -> mk ":" "object" "end"
-    | "class-type"          -> mk "=" "object" "end"
-    | _                     -> mk ":" "begin" "end"
+    if content = [] then sp
+    else
+      indent 2 (break ++ body)
+      ++ break
   in
   surround @@ item ~nested:true content
 

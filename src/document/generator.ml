@@ -1210,7 +1210,13 @@ struct
                 ++ mty (arg.id :> Paths.Identifier.Signature.t) arg.expr)
             in
             let status = `Default in
-            DocumentedSrc.[ Alternative (Expansion {summary; url; expansion = [Subpage { content ; status }] })]
+            let expansion =
+              O.documentedSrc
+                (O.txt Syntax.Type.annotation_separator ++ O.keyword "sig")
+              @ DocumentedSrc.[Subpage { content ; status }]
+              @ O.documentedSrc (O.keyword "end")
+            in
+            DocumentedSrc.[ Alternative (Expansion {summary; url; expansion })]
           in
           O.documentedSrc (O.keyword "module" ++ O.txt " " ++ modname)
           @ modtyp
