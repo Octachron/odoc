@@ -48,7 +48,7 @@ let mk_pkg_dir root_dir pkg_name =
 
 let link_children pkgdir parents self children ppf =
   let page_input ppf name =
-    let child_fullname = String.concat ~sep:"." (self :: parents @ [ name]) ^ ".tex" in
+    let child_fullname = String.concat ~sep:"." (List.rev (name :: self :: parents)) ^ ".tex" in
     let loc = Fs.File.( to_string @@ create ~directory:pkgdir ~name:child_fullname) in
     Format.fprintf ppf  {|@[<v>\input{%s}@,@]|} loc in
   List.iter ~f:(page_input ppf) children
@@ -85,7 +85,7 @@ let from_odoc ~env ?(syntax=Renderer.OCaml) ~output:root_dir input =
     let pkg_dir = mk_pkg_dir  root_dir root.package in
     let pages = mk_compilation_unit ~syntax odoctree in
     traverse pages ~f:(fun ~parents ~children_names name content ->
-      let page_name = String.concat ~sep:"." (parents @ [name]) in
+      let page_name = String.concat ~sep:"." (List.rev @@ name :: parents) in
       with_tex_file ~pkg_dir ~page_name (fun ppf ->
         content ppf;
         link_children pkg_dir parents name children_names ppf
