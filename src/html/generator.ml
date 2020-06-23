@@ -221,16 +221,6 @@ let class_of_kind kind = match kind with
   | Some spec -> class_ ["spec"; spec]
   | None -> []
 
-let should_coalesce = function
-  | None -> false
-  | Some s -> match s with
-    | "exception" | "value" | "external"
-    | "type" | "type-subst" | "extension"
-    | "module-substitution"
-    | "method" | "instance-variable" | "inherit"
-      -> true
-    | _ -> false
-
 let rec documentedSrc ~resolve (t : DocumentedSrc.t) : item Html.elt list =
   let open DocumentedSrc in
   let take_code l =
@@ -331,31 +321,6 @@ and items ~resolve l : item Html.elt list =
       [Html.div [Html.div ~a
             (anchor_link @ [Html.div ~a:[Html.a_class ["doc"]]
                 (docs @ content)])]]
-      |> continue_with rest
-
-    | Declaration { kind = kind0 ; _ } :: _ as t
-      when should_coalesce kind0 ->
-      let l, doc, rest = Doctree.Take.until t ~classify:(function
-        | Item.Declaration { doc = [] ; anchor ; content ; kind }
-          when kind = kind0 ->
-          Accum [(anchor, content, kind)]
-        | Item.Declaration { kind; anchor; content; doc } when kind = kind0 ->
-          Stop_and_accum ([(anchor, content, kind)], Some doc)
-        | _ -> Stop_and_keep)
-      in
-      let content = List.map (fun (anchor, content, kind) ->
-        let anchor_attrib, anchor_link = mk_anchor anchor in
-        let a = class_of_kind kind @ anchor_attrib in
-        let content = documentedSrc ~resolve content in
-        div ~a (anchor_link @ content)
-      ) l
-      in
-      let docs =
-        match doc with
-        | None | Some [] -> []
-        | Some d -> [div (flow_to_item @@ block ~resolve d)]
-      in
-      [div (content @ docs)]
       |> continue_with rest
 
     | Declaration {Item. kind; anchor ; content ; doc} :: rest ->
