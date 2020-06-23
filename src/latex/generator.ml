@@ -142,6 +142,17 @@ module Link = struct
      flatten_path x.page
      x.anchor
 
+  let rec is_class_or_module_path (url : Odoc_document.Url.Path.t) = match url.kind with
+    | "module" | "package" | "class" ->
+      begin match url.parent with
+      | None -> true
+      | Some url -> is_class_or_module_path url
+      end
+    | _ -> false
+
+  let should_inline x = not @@ is_class_or_module_path x
+
+
 end
 
 
@@ -416,37 +427,50 @@ let rec block ~in_source (l: Block.t)  =
   in
   list_concat_map l ~f:one
 
+let rec is_only_text l =
+  let is_text : Item.t -> _ = function
+    | Heading _ | Text _ -> true
+    | Declaration _
+      -> false
+    |  Include { content = items; _ }
+      -> is_only_text items.content
+  in
+  List.for_all is_text l
 
-let documentedSrc (t : DocumentedSrc.t) =
+let rec documentedSrc (t : DocumentedSrc.t) =
   let open DocumentedSrc in
-  let take_code l =
-    Doctree.Take.until l ~classify:(function
-      | Code code -> Accum code
-      | _ -> Stop_and_keep
-    )
-  in
-  let take_descr l =
-    Doctree.Take.until l ~classify:(function
-      | Documented { attrs; anchor; code; doc }  ->
-        Accum [{DocumentedSrc. attrs ; anchor ; code = `D code; doc }]
-      | Nested { attrs; anchor; code; doc } ->
-        Accum [{DocumentedSrc. attrs ; anchor ; code = `N code; doc }]
-      | _ -> Stop_and_keep
-    )
-  in
   let rec to_latex t = match t with
     | [] -> []
     | Code _ :: _ ->
+      let take_code l =
+        Doctree.Take.until l ~classify:(function
+          | Code code -> Accum code
+          | _ -> Stop_and_keep
+        )
+      in
       let code, _, rest = take_code t in
       non_empty_block_code code ~in_source:true
       @ to_latex rest
     | Alternative (Expansion e) :: rest ->
-      to_latex e.expansion
-      @ to_latex rest
+      begin if Link.should_inline e.url then
+        to_latex e.expansion
+      else
+        non_empty_block_code e.summary ~in_source:true
+    end
+        @ to_latex rest
     | Subpage subp :: rest ->
-      (??)
+        items subp.content.items
       @ to_latex rest
     | (Documented _ | Nested _) :: _ ->
+      let take_descr l =
+        Doctree.Take.until l ~classify:(function
+          | Documented { attrs; anchor; code; doc }  ->
+            Accum [{DocumentedSrc. attrs ; anchor ; code = `D code; doc }]
+          | Nested { attrs; anchor; code; doc } ->
+            Accum [{DocumentedSrc. attrs ; anchor ; code = `N code; doc }]
+          | _ -> Stop_and_keep
+        )
+      in
       let l, _, rest = take_descr t in
       let one dsrc =
         let content = match dsrc.code with
@@ -460,19 +484,8 @@ let documentedSrc (t : DocumentedSrc.t) =
   in
   to_latex t
 
-let rec is_only_text l =
-  let is_text : Item.t -> _ = function
-    | Heading _ | Text _ -> true
-    | Declaration _
-      -> false
-    | Subpage { content = { content = Items items; _ }; _ }
-      -> is_only_text items
-    | Subpage { content = { content = Page p; _ }; _ }
-      -> is_only_text p.items
-  in
-  List.for_all is_text l
 
-let items l =
+and items l =
   let[@tailrec] rec walk_items
       ~only_text acc (t : Item.t list) =
     let continue_with rest elts =
@@ -492,13 +505,10 @@ let items l =
     | Heading h :: rest ->
       heading h
       |> continue_with rest
-    | Subpage
+    | Include
         { kind=_; anchor; doc ; content = { summary; status=_; content } }
       :: rest ->
-      let included = match content with
-        | Items i -> items i
-        | Page p -> items p.items
-      in
+      let included = items content  in
       let docs = block ~in_source:true  doc in
       let summary = source (inline ~in_source:true) summary in
       let content = included in
@@ -531,17 +541,13 @@ end
 
 module Page = struct
 
-  let on_sub (subp : Subpage.t) = match subp.status with
-    | `Closed | `Open | `Default -> None
-    | `Inline -> Some 1
+  let on_sub = function
+    | `Inline _ | `Subpage |  _ -> Some 1
 
-  let rec subpage {Subpage. content ; _} =
-    match content with
-    | Page p -> [page p]
-    | Items _ -> []
+  let rec subpage (p:Subpage.t) = [ page p.content ]
 
   and subpages i =
-    list_concat_map ~f:subpage @@ Doctree.Subpages.compute i
+    List.concat_map subpage @@ Doctree.Subpages.compute i
 
   and page ({Page. title; header; items = i; url } as p) =
     let i = Doctree.Shift.compute ~on_sub i in
