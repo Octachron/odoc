@@ -266,14 +266,16 @@ let rec documentedSrc ~resolve (t : DocumentedSrc.t) : item Html.elt list =
         in
         let doc =
           Utils.optional_elt
-            div ~a:(class_ ["doc"])
-            (flow_to_item @@ block ~resolve doc)
+            Html.td ~a:(class_ ["doc"]) (block ~resolve doc)
         in
         let a, link = mk_anchor anchor in
-        div ~a
-          (div ~a:(class_ attrs) (link @ content) :: doc)
+        let content =
+          let c = link @ content in
+          Html.td ~a:(class_ attrs) (c :> any Html.elt list)
+        in 
+        Html.tr ~a (content :: doc)
       in
-      List.map one l @ to_html rest
+      Html.table (List.map one l) :: to_html rest
   in
   to_html t
 
