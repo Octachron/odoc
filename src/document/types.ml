@@ -178,7 +178,7 @@ and Page : sig
 end = Page
 
 type Alternative.t +=
-  | Expansion of { summary: Source.t; expansion: DocumentedSrc.t }
+  | Expansion of { summary: Source.t; expansion: DocumentedSrc.t; url: Url.Path.t }
 
 let inline ?(attr=[]) desc = Inline.{attr ; desc}
 let block ?(attr=[]) desc = Block.{attr ; desc}
