@@ -76,9 +76,9 @@ let attach_expansion ?(status=`Default) (eq, o, e) page text =
     let url = page.url in
     let summary = O.render text in
     let expansion =
-      O.documentedSrc (O.txt eq ++ O.txt o ++ O.txt "\n")
+      O.documentedSrc (O.txt eq ++ O.keyword o)
       @ DocumentedSrc.[Subpage { status ; content = page }]
-      @ O.documentedSrc (O.txt "\n" ++ O.txt e)
+      @ O.documentedSrc (O.keyword e)
     in
     DocumentedSrc.[Alternative (Expansion { summary; url ; expansion })]
 
