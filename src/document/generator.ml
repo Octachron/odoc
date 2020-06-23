@@ -73,7 +73,8 @@ let attach_expansion ?(status=`Default) page text = match page with
   | None -> O.documentedSrc text
   | Some content ->
     let summary = O.render text in
-    [DocumentedSrc.Subpage { summary ; content ; status }]
+    let content = DocumentedSrc.[Alternative (Expansion{ summary; expansion = content })] in
+    [DocumentedSrc.Subpage { content ; status }]
 
 include Generator_signatures
 

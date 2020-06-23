@@ -112,15 +112,20 @@ and DocumentedSrc : sig
     | Documented of Inline.t documented
     | Nested of t documented
     | Subpage of Subpage.t
+    | Alternative of Alternative.t
 
 end = DocumentedSrc
+
+and Alternative : sig
+  type t = ..
+end =
+  Alternative
 
 and Subpage : sig
 
   type status = [ `Inline | `Open | `Closed | `Default ]
 
   type t = {
-    summary : Source.t ;
     status : status ;
     content : content ;
   }
@@ -162,6 +167,9 @@ and Page : sig
   }
 
 end = Page
+
+type Alternative.t +=
+  | Expansion of { summary: Source.t; expansion: DocumentedSrc.t }
 
 let inline ?(attr=[]) desc = Inline.{attr ; desc}
 let block ?(attr=[]) desc = Block.{attr ; desc}

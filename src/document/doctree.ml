@@ -94,6 +94,8 @@ module Subpages = struct
       | Documented _ -> []
       | Nested { code ; _ } -> walk_documentedsrc code
       | Subpage p -> [p]
+      | Alternative Types.Expansion r -> walk_documentedsrc r.expansion
+      | Alternative _ -> []
     )
 
   let walk_items (l : Item.t list) =
@@ -141,6 +143,11 @@ module Shift = struct
     | Subpage subp :: rest ->
       let subp = subpage ~on_sub shift_state subp in
       Subpage subp :: walk_documentedsrc ~on_sub shift_state rest
+   | Alternative Expansion r :: rest ->
+      let expansion =  walk_documentedsrc ~on_sub shift_state r.expansion in
+      Alternative (Expansion { r with expansion }) :: walk_documentedsrc ~on_sub shift_state rest
+   | Alternative _ as a :: rest -> a :: walk_documentedsrc ~on_sub shift_state rest
+
 
   and subpage ~on_sub shift_state (subp : Subpage.t) =
     match on_sub subp with
