@@ -76,9 +76,9 @@ let attach_expansion ?(status=`Default) (eq, o, e) page text =
     let url = page.url in
     let summary = O.render text in
     let expansion =
-      O.documentedSrc (O.txt eq ++ O.txt o)
+      O.documentedSrc (O.txt eq ++ O.txt o ++ O.txt "\n")
       @ DocumentedSrc.[Subpage { status ; content = page }]
-      @ O.documentedSrc (O.txt e)
+      @ O.documentedSrc (O.txt "\n" ++ O.txt e)
     in
     DocumentedSrc.[Alternative (Expansion { summary; url ; expansion })]
 
@@ -1054,7 +1054,7 @@ struct
     let summary = O.txt Syntax.Type.annotation_separator ++ class_decl t.type_ in
     let cd =
       attach_expansion
-        (Syntax.Type.annotation_separator,"class","end") expansion summary
+        (Syntax.Type.annotation_separator,"object","end") expansion summary
     in
     let content =
       let open Lang.Signature in
@@ -1098,7 +1098,7 @@ struct
     in
     let expr =
       attach_expansion
-        (" = ","class","end")
+        (" = ","object","end")
         expansion (class_type_expr t.expr)
     in
     let content =
@@ -1312,7 +1312,7 @@ struct
       in
       let modexpr =
         attach_expansion
-          (Syntax.Type.annotation_separator,"module","end")
+          (Syntax.Type.annotation_separator,"sig","end")
           expansion summary
       in
       let content =
@@ -1393,7 +1393,7 @@ struct
         O.txt " = " ++ mty (t.id :> Paths.Identifier.Signature.t) expr
     in
     let mty =
-      attach_expansion (" = ","module type","end") expansion summary
+      attach_expansion (" = ","sig","end") expansion summary
     in
     let content =
       O.documentedSrc (
