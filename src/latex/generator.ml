@@ -422,7 +422,6 @@ let documentedSrc (t : DocumentedSrc.t) =
   let take_code l =
     Doctree.Take.until l ~classify:(function
       | Code code -> Accum code
-      | Subpage p -> Accum p.summary
       | _ -> Stop_and_keep
     )
   in
@@ -437,9 +436,15 @@ let documentedSrc (t : DocumentedSrc.t) =
   in
   let rec to_latex t = match t with
     | [] -> []
-    | (Code _ | Subpage _) :: _ ->
+    | Code _ :: _ ->
       let code, _, rest = take_code t in
       non_empty_block_code code ~in_source:true
+      @ to_latex rest
+    | Alternative (Expansion e) :: rest ->
+      to_latex e.expansion
+      @ to_latex rest
+    | Subpage subp :: rest ->
+      (??)
       @ to_latex rest
     | (Documented _ | Nested _) :: _ ->
       let l, _, rest = take_descr t in
