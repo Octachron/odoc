@@ -547,7 +547,7 @@ module Page = struct
   let rec subpage (p:Subpage.t) = [ page p.content ]
 
   and subpages i =
-    List.concat_map subpage @@ Doctree.Subpages.compute i
+    List.flatten @@ List.map subpage @@ Doctree.Subpages.compute i
 
   and page ({Page. title; header; items = i; url } as p) =
     let i = Doctree.Shift.compute ~on_sub i in
