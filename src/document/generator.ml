@@ -1251,11 +1251,11 @@ struct
         in
         let prelude =
           [Item.Heading {
-            label = Some "heading" ; level = 2 ; title = [inline @@ Text "Parameters"];
+            label = Some "parameters" ; level = 2 ; title = [inline @@ Text "Parameters"];
           }]
           @ params
           @ [Item.Heading {
-            label = Some "heading" ; level = 2 ; title = [inline @@ Text "Signature"];
+            label = Some "signature" ; level = 2 ; title = [inline @@ Text "Signature"];
           }]
         in
         prelude, content
