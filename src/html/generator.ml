@@ -414,8 +414,11 @@ end
 module Page = struct
 
   let on_sub = function
-    | `Closed | `Open | `Default -> None
-    | `Inline -> Some 0
+    | `Page _ -> None
+    | `Include x -> begin match x.Include.status with
+      | `Closed | `Open | `Default -> None
+      | `Inline -> Some 0
+    end
 
   let rec include_ ?theme_uri {Subpage. content ; _} =
     [page ?theme_uri content]

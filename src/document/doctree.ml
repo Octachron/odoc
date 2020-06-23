@@ -97,12 +97,12 @@ module Subpages = struct
       | Alternative Expansion r -> walk_documentedsrc r.expansion
     )
 
-  let walk_items (l : Item.t list) =
+  let rec walk_items (l : Item.t list) =
     Utils.flatmap l ~f:(function
       | Item.Text _ -> []
       | Heading _ -> []
       | Declaration { content ; _ } -> walk_documentedsrc content
-      | Include _ -> []
+      | Include i -> walk_items i.content.content
     )
 
   let compute (p : Page.t) = walk_items (p.header @ p.items)
@@ -147,7 +147,7 @@ module Shift = struct
       Alternative (Expansion { r with expansion }) :: walk_documentedsrc ~on_sub shift_state rest
 
   and subpage ~on_sub shift_state (subp : Subpage.t) =
-    match on_sub subp.status with
+    match on_sub (`Page subp) with
     | None -> subp
     | Some i ->
       let shift_state = enter shift_state i in
@@ -161,7 +161,7 @@ module Shift = struct
       {subp with content}
 
   and include_ ~on_sub shift_state (subp : Include.t) =
-    match on_sub subp.status with
+    match on_sub (`Include subp) with
     | None -> subp
     | Some i ->
       let shift_state = enter shift_state i in
