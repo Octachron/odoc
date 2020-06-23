@@ -127,14 +127,23 @@ and Subpage : sig
 
   type t = {
     status : status ;
-    content : content ;
+    content : Page.t ;
   }
 
-  and content =
-    | Items of Item.t list
-    | Page of Page.t
 
 end = Subpage
+
+and Include : sig
+
+  type status = [ `Inline | `Open | `Closed | `Default ]
+
+  type t = {
+    status : status ;
+    content : Item.t list ;
+    summary: Source.t
+  }
+
+end = Include
 
 
 and Item : sig
@@ -153,7 +162,7 @@ and Item : sig
     | Text of text
     | Heading of Heading.t
     | Declaration of DocumentedSrc.t item
-    | Subpage of Subpage.t item
+    | Include of Include.t item
 
 end = Item
 
