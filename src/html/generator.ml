@@ -195,51 +195,6 @@ let rec block ~resolve (l: Block.t) : flow Html.elt list =
   in
   Utils.list_concat_map l ~f:one
 
-
-let documentedSrc ~resolve (t : DocumentedSrc.t) =
-  let open DocumentedSrc in
-  let take_code l =
-    Doctree.Take.until l ~classify:(function
-      | Code code -> Accum code
-      | Subpage p -> Accum p.summary
-      | _ -> Stop_and_keep
-    )
-  in
-  let take_descr l =
-    Doctree.Take.until l ~classify:(function
-      | Documented { attrs; anchor; code; doc }  ->
-        Accum [{DocumentedSrc. attrs ; anchor ; code = `D code; doc }]
-      | Nested { attrs; anchor; code; doc } ->
-        Accum [{DocumentedSrc. attrs ; anchor ; code = `N code; doc }]
-      | _ -> Stop_and_keep
-    )
-  in
-  let rec to_html t : flow Html.elt list = match t with
-    | [] -> []
-    | (Code _ | Subpage _) :: _ ->
-      let code, _, rest = take_code t in
-      source (inline ~resolve) code
-      @ to_html rest
-    | (Documented _ | Nested _) :: _ ->
-      let l, _, rest = take_descr t in
-      let one {DocumentedSrc. attrs ; anchor ; code ; doc } =
-        let content = match code with
-          | `D code -> (inline ~resolve code :> flow Html.elt list)
-          | `N n -> to_html n
-        in
-        let doc =
-          Utils.optional_elt
-            Html.td ~a:(class_ ["doc"]) (block ~resolve doc)
-        in
-        let a, link = mk_anchor anchor in
-        Html.tr ~a
-          (Html.td ~a:(class_ attrs) (link @ content) :: doc)
-      in
-      Html.table (List.map one l)
-      :: to_html rest
-  in
-  to_html t
-
 (* This coercion is actually sound, but is not currently accepted by Tyxml.
    See https://github.com/ocsigen/tyxml/pull/265 for details
    Can be replaced by a simple type coercion once this is fixed
@@ -248,15 +203,17 @@ let flow_to_item
   : flow Html.elt list -> item Html.elt list
   = fun x -> Html.totl @@ Html.toeltl x
 
+let div
+  : ([< Html_types.div_attrib], [< item], [> Html_types.div]) Html.star
+  = Html.Unsafe.node "div"
+
 let rec is_only_text l =
   let is_text : Item.t -> _ = function
     | Heading _ | Text _ -> true
     | Declaration _
       -> false
-    | Subpage { content = { content = Items items; _ }; _ }
-      -> is_only_text items
-    | Subpage { content = { content = Page p; _ }; _ }
-      -> is_only_text p.items
+    | Include { content = { content; _ }; _ }
+      -> is_only_text content
   in
   List.for_all is_text l
 
@@ -274,7 +231,56 @@ let should_coalesce = function
       -> true
     | _ -> false
 
-let items ~resolve l =
+let rec documentedSrc ~resolve (t : DocumentedSrc.t) : item Html.elt list =
+  let open DocumentedSrc in
+  let take_code l =
+    Doctree.Take.until l ~classify:(function
+      | Code code -> Accum code
+      | Alternative (Expansion {summary; _}) -> Accum summary
+      | _ -> Stop_and_keep
+    )
+  in
+  let take_descr l =
+    Doctree.Take.until l ~classify:(function
+      | Documented { attrs; anchor; code; doc }  ->
+        Accum [{DocumentedSrc. attrs ; anchor ; code = `D code; doc }]
+      | Nested { attrs; anchor; code; doc } ->
+        Accum [{DocumentedSrc. attrs ; anchor ; code = `N code; doc }]
+      | _ -> Stop_and_keep
+    )
+  in
+  let rec to_html t : item Html.elt list = match t with
+    | [] -> []
+    | (Code _ | Alternative _) :: _ ->
+      let code, _, rest = take_code t in
+      source (inline ~resolve) code
+      @ to_html rest
+    | Subpage subp :: _ ->
+      subpage ~resolve subp
+    | (Documented _ | Nested _) :: _ ->
+      let l, _, rest = take_descr t in
+      let one {DocumentedSrc. attrs ; anchor ; code ; doc } =
+        let content = match code with
+          | `D code -> (inline ~resolve code :> item Html.elt list)
+          | `N n -> to_html n
+        in
+        let doc =
+          Utils.optional_elt
+            div ~a:(class_ ["doc"])
+            (flow_to_item @@ block ~resolve doc)
+        in
+        let a, link = mk_anchor anchor in
+        div ~a
+          (div ~a:(class_ attrs) (link @ content) :: doc)
+      in
+      List.map one l @ to_html rest
+  in
+  to_html t
+
+and subpage ~resolve (subp : Subpage.t) : item Html.elt list =
+  items ~resolve subp.content.items
+
+and items ~resolve l : item Html.elt list =
   let[@tailrec] rec walk_items
       ~only_text acc (t : Item.t list) : item Html.elt list =
     let continue_with rest elts =
@@ -298,13 +304,10 @@ let items ~resolve l =
     | Heading h :: rest ->
       [heading ~resolve h]
       |> continue_with rest
-    | Subpage
+    | Include
         { kind; anchor; doc ; content = { summary; status; content } }
       :: rest ->
-      let included_html = match content with
-        | Items i -> (items i :> any Html.elt list)
-        | Page p -> (items p.items :> any Html.elt list)
-      in
+      let included_html = (items content :> any Html.elt list) in
       let docs = (block ~resolve doc :> any Html.elt list) in
       let summary = source (inline ~resolve) summary in
       let content : any Html.elt list =
@@ -342,15 +345,15 @@ let items ~resolve l =
         let anchor_attrib, anchor_link = mk_anchor anchor in
         let a = class_of_kind kind @ anchor_attrib in
         let content = documentedSrc ~resolve content in
-        Html.dt ~a (anchor_link @ content)
+        div ~a (anchor_link @ content)
       ) l
       in
       let docs =
         match doc with
         | None | Some [] -> []
-        | Some d -> [Html.dd (block ~resolve d)]
+        | Some d -> [div (flow_to_item @@ block ~resolve d)]
       in
-      [Html.dl (content @ docs)]
+      [div (content @ docs)]
       |> continue_with rest
 
     | Declaration {Item. kind; anchor ; content ; doc} :: rest ->
@@ -359,11 +362,11 @@ let items ~resolve l =
       let content = anchor_link @ documentedSrc ~resolve content in
       let elts = match doc with
         | [] ->
-          [Html.div ~a content]
+          [div ~a content]
         | docs ->
-          [Html.dl [
-              Html.dt ~a content;
-              Html.dd (block ~resolve docs);
+          [div [
+              div ~a content;
+              div (flow_to_item @@ block ~resolve docs);
             ]]
       in
       continue_with rest elts
@@ -408,17 +411,15 @@ end
 
 module Page = struct
 
-  let on_sub (subp : Subpage.t) = match subp.status with
+  let on_sub = function
     | `Closed | `Open | `Default -> None
     | `Inline -> Some 0
 
-  let rec subpage ?theme_uri {Subpage. content ; _} =
-    match content with
-    | Page p -> [page ?theme_uri p]
-    | Items _ -> []
+  let rec include_ ?theme_uri {Subpage. content ; _} =
+    [page ?theme_uri content]
 
   and subpages  ?theme_uri i =
-    Utils.list_concat_map ~f:(subpage ?theme_uri) @@ Doctree.Subpages.compute i
+    Utils.list_concat_map ~f:(include_ ?theme_uri) @@ Doctree.Subpages.compute i
 
   and page ?theme_uri ({Page. title; header; items = i; url } as p) =
     let resolve = Link.Current url in
