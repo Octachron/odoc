@@ -73,8 +73,7 @@ let attach_expansion ?(status=`Default) page text = match page with
   | None -> O.documentedSrc text
   | Some content ->
     let summary = O.render text in
-    let content = DocumentedSrc.[Alternative (Expansion{ summary; expansion = content })] in
-    [DocumentedSrc.Subpage { content ; status }]
+    DocumentedSrc.[Alternative (Expansion{ summary; url = content.url;  expansion =[DocumentedSrc.Subpage { content ; status }] })]
 
 include Generator_signatures
 
@@ -1041,7 +1040,7 @@ struct
         let items = class_signature csig in
         let url = Url.Path.from_identifier t.id in
         let header = format_title `Class (make_name_from_path url) @ doc in
-        let page = Subpage.Page { title = name ; header ; items ; url } in
+        let page = { Page.title = name ; header ; items ; url } in
         O.documentedSrc @@ path url [inline @@ Text name],
         Some page
     in
@@ -1084,7 +1083,7 @@ struct
         let doc = Comment.standalone t.doc in
         let items = class_signature csig in
         let header = format_title `Cty (make_name_from_path url) @ doc in
-        let page = Subpage.Page { title = name ; header ; items ; url } in
+        let page = { Page.title = name ; header ; items ; url } in
         O.documentedSrc @@ path url [inline @@ Text name],
         Some page
     in
@@ -1193,14 +1192,14 @@ struct
               format_title `Arg (make_name_from_path url) @ prelude
             in
             let title = name in
-            let content = Subpage.Page { items ; title ; header ; url } in
+            let content = { Page.items ; title ; header ; url } in
             let summary =
               O.render (
                 O.txt Syntax.Type.annotation_separator
                 ++ mty (arg.id :> Paths.Identifier.Signature.t) arg.expr)
             in
             let status = `Default in
-            [DocumentedSrc.Subpage { content ; summary ; status }]
+            DocumentedSrc.[ Alternative (Expansion {summary; url; expansion = [Subpage { content ; status }] })]
           in
           O.documentedSrc (O.keyword "module" ++ O.txt " " ++ modname)
           @ modtyp
@@ -1291,7 +1290,7 @@ struct
           let header =
             format_title `Mod (make_name_from_path url) @ doc @ prelude
           in
-          let page = Subpage.Page {items ; title ; header ; url } in
+          let page = {Page.items ; title ; header ; url } in
           O.documentedSrc link, Some page
       in
       let modexpr =
@@ -1369,7 +1368,7 @@ struct
         let header =
           format_title `Mty (make_name_from_path url) @ doc @ prelude
         in
-        let page = Subpage.Page {items ; title ; header ; url } in
+        let page = {Page.items ; title ; header ; url } in
         O.documentedSrc link, Some page
     in
     let mty =
@@ -1490,9 +1489,7 @@ struct
       else if List.exists is_closed_tag t.doc then `Closed
       else `Default
     in
-    let content =
-      Subpage.Items (signature t.expansion.content)
-    in
+    let content = signature t.expansion.content in
     let summary =
       O.render (
         O.keyword "include" ++
@@ -1501,11 +1498,11 @@ struct
           (if Syntax.Mod.include_semicolon then O.keyword ";" else O.noop)
       )
     in
-    let content = {Subpage. content; status; summary} in
+    let content = {Include. content; status; summary} in
     let kind = Some "include" in
     let anchor = None in
     let doc = Comment.first_to_ir t.doc in
-    Item.Subpage {kind ; anchor ; doc ; content}
+    Item.Include {kind ; anchor ; doc ; content}
 
 end
 open Module
