@@ -38,6 +38,7 @@ type elt =
   | Break of break_hierarchy
   | List of { typ : Block.list_type; items: t list }
   | Description of (t * t) list
+  | Subpage of t
   | Table of t list list
 
 and t = elt list
@@ -309,6 +310,7 @@ let rec pp_elt ppf = function
       matrix ppf l;
     break Line ppf "after tabular"
   | Label x -> mlabel ppf x
+  | Subpage x -> env "adjustwidth" ~args:[Format.dprintf "2em"; Format.dprintf "0pt"] pp ppf x
   | _ -> .
 
 and pp ppf = function
@@ -459,8 +461,8 @@ let rec documentedSrc (t : DocumentedSrc.t) =
     end
         @ to_latex rest
     | Subpage subp :: rest ->
-      Break Line :: items subp.content.items
-      @ to_latex rest
+      Subpage (items subp.content.items)
+      :: to_latex rest
     | (Documented _ | Nested _) :: _ ->
       let take_descr l =
         Doctree.Take.until l ~classify:(function
