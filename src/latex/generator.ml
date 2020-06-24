@@ -459,7 +459,7 @@ let rec documentedSrc (t : DocumentedSrc.t) =
     end
         @ to_latex rest
     | Subpage subp :: rest ->
-        items subp.content.items
+      Break Line :: items subp.content.items
       @ to_latex rest
     | (Documented _ | Nested _) :: _ ->
       let take_descr l =
@@ -544,7 +544,7 @@ module Page = struct
   let on_sub = function
     | `Inline _ | `Subpage |  _ -> Some 1
 
-  let rec subpage (p:Subpage.t) = [ page p.content ]
+  let rec subpage (p:Subpage.t) = if Link.should_inline p.content.url then [] else [ page p.content ]
 
   and subpages i =
     List.flatten @@ List.map subpage @@ Doctree.Subpages.compute i
