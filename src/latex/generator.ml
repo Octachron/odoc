@@ -23,6 +23,12 @@ type break_hierarchy =
   | Separation
 
 
+type row_size =
+  | Empty
+  | Small (** aka text only *)
+  | Large (** aka any thing goes *)
+
+
 type elt =
   | Txt of { kind: text_kind; words: string list }
   | Section of {level:int; label:string option; content:t }
@@ -39,7 +45,7 @@ type elt =
   | List of { typ : Block.list_type; items: t list }
   | Description of (t * t) list
   | Subpage of t
-  | Table of t list list
+  | Table of { row_size: row_size; tbl: t list list}
 
 and t = elt list
 and reference = { short:bool; target:string; content: t option }
@@ -257,15 +263,30 @@ let escape_entity  = function
   | "#8288" -> ""
   | s -> s
 
-let elide_table = function
+
+
+
+(*
+*)
+
+let is_text (x:elt) = match x with
+  | Txt _ | Internal_ref _ | External_ref _ | Label _ | Style _ | InlineCode _ | Tag _ | Break _ -> true
+  | List _ | Table _ | Section _ | Verbatim _ | Raw _ | BlockCode _ | Subpage _ | Description _-> false
+
+let table = function
   | [] -> []
   | a :: _ as m ->
-    let start = List.map (fun _ -> false) a in
-    let is_content = function [] -> false | _ :: _ -> true in
-    let row mask l = List.map2 (fun x y -> x || is_content y) mask l in
+    let start = List.map (fun _ -> Empty) a in
+    let content_size = function
+      | [] -> Empty
+      | l when List.for_all is_text l -> Small
+      | _ -> Large  in
+    let row mask l = List.map2 (fun x y -> max x @@ content_size y) mask l in
     let mask = List.fold_left row start m in
-    let filter_row row = List.filter_map (fun x -> x) @@ List.map2 (fun b x -> if b then Some x else None) mask row in
-    List.map filter_row m
+    let filter_empty = function Empty, _ -> None | (Small | Large), x -> Some x in
+    let filter_row row = List.filter_map filter_empty @@ List.combine mask row in
+    let row_size = List.fold_left max Empty (List.tl mask) in
+    [Table { row_size; tbl= List.map filter_row m }]
 
 let rec pp_elt ppf = function
   | Txt { kind; words } ->
@@ -292,27 +313,15 @@ let rec pp_elt ppf = function
   | InlineCode x -> inline_code pp ppf x
   | List {typ; items} -> list typ pp ppf items
   | Description items -> description pp ppf items
-  | Table [] -> ()
-  | Table (a  :: _ as l) ->
-    let columns = List.length a in
-    let row ppf x =
-      let ampersand ppf () = Format.fprintf ppf "& " in
-      Fmt.list ~sep:ampersand pp ppf x;
-      break Line ppf "row" in
-    let matrix ppf m = List.iter (row ppf) m in
-    let rec repeat n s ppf = if n = 0 then () else
-        Format.fprintf ppf "%t%t" s (repeat (n - 1) s) in
-    (* We are using pbox to be able to nest lists inside the tables *)
-    let frac ppf = Format.fprintf ppf " p{%.2f\\linewidth} " (1. /. float columns) in
-    env "longtable"
-      ~args:[ repeat columns frac  ]
-      matrix ppf l
+  | Table { row_size=Large; tbl } -> large_table ppf tbl
+  | Table { row_size=Small|Empty; tbl } -> small_table ppf tbl
   | Label x -> mlabel ppf x
   | Subpage x -> env "adjustwidth" ~args:[Format.dprintf "2em"; Format.dprintf "0pt"] pp ppf x
   | _ -> .
 
 and pp ppf = function
   | [] -> ()
+  | Break _ :: (Table _ :: _ as q) -> pp ppf q
   | Table _ as t :: Break _ :: q ->
     pp ppf ( t :: q )
   | Break a :: (Break b :: q) ->
@@ -327,6 +336,38 @@ and href ppf (l,txt) =
   | Some txt ->
     Format.fprintf ppf {|\href{%s}{%a}|} l pp txt
   | None -> Format.fprintf ppf {|\url{%s}|} l
+
+and large_table ppf tbl =
+    let columns = List.length (List.hd tbl) in
+    let row ppf x =
+      let ampersand ppf () = Format.fprintf ppf "& " in
+      Fmt.list ~sep:ampersand pp ppf x;
+      break Line ppf "row" in
+    let matrix ppf m = List.iter (row ppf) m in
+    let rec repeat n s ppf = if n = 0 then () else
+        Format.fprintf ppf "%t%t" s (repeat (n - 1) s) in
+    (* We are using pbox to be able to nest lists inside the tables *)
+    let frac ppf = Format.fprintf ppf " p{%.2f\\linewidth} " (1. /. float columns) in
+    env "longtable"
+      ~args:[ repeat columns frac  ]
+      matrix ppf tbl
+
+and small_table ppf tbl =
+    let columns = List.length (List.hd tbl) in
+    let row ppf x =
+      let ampersand ppf () = Format.fprintf ppf "& " in
+      Fmt.list ~sep:ampersand pp ppf x;
+      break Line ppf "row" in
+    let matrix ppf m = List.iter (row ppf) m in
+    let rec repeat n s ppf = if n = 0 then () else
+        Format.fprintf ppf "%c%t" s (repeat (n - 1) s) in
+    (* We are using pbox to be able to nest lists inside the tables *)
+    env "longtable"
+      ~opts:[Format.dprintf "l"]
+      ~args:[ repeat columns 'l' ]
+      matrix ppf tbl
+
+
 
 let raw_markup (t:Raw_markup.t) =
   match t with
@@ -429,6 +470,7 @@ let rec block ~in_source (l: Block.t)  =
   in
   list_concat_map l ~f:one
 
+
 let rec is_only_text l =
   let is_text : Item.t -> _ = function
     | Heading _ | Text _ -> true
@@ -438,6 +480,7 @@ let rec is_only_text l =
       -> is_only_text items.content
   in
   List.for_all is_text l
+
 
 let rec documentedSrc (t : DocumentedSrc.t) =
   let open DocumentedSrc in
@@ -482,7 +525,7 @@ let rec documentedSrc (t : DocumentedSrc.t) =
         let doc = [block ~in_source:true dsrc.doc] in
         (content @ label dsrc.anchor ) :: doc
       in
-      Table (elide_table @@ List.map one l) :: to_latex rest
+      table (List.map one l) @ to_latex rest
   in
   to_latex t
 
