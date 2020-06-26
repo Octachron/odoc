@@ -304,17 +304,17 @@ let rec pp_elt ppf = function
         Format.fprintf ppf "%t%t" s (repeat (n - 1) s) in
     (* We are using pbox to be able to nest lists inside the tables *)
     let frac ppf = Format.fprintf ppf " p{%.2f\\linewidth} " (1. /. float columns) in
-    break Line ppf "before tabular";
-    env "tabular"
+    env "longtable"
       ~args:[ repeat columns frac  ]
-      matrix ppf l;
-    break Line ppf "after tabular"
+      matrix ppf l
   | Label x -> mlabel ppf x
   | Subpage x -> env "adjustwidth" ~args:[Format.dprintf "2em"; Format.dprintf "0pt"] pp ppf x
   | _ -> .
 
 and pp ppf = function
   | [] -> ()
+  | Table _ as t :: Break _ :: q ->
+    pp ppf ( t :: q )
   | Break a :: (Break b :: q) ->
     pp ppf ( Break (max a b) :: q)
   | a :: q ->
@@ -482,7 +482,7 @@ let rec documentedSrc (t : DocumentedSrc.t) =
         let doc = [block ~in_source:true dsrc.doc] in
         (content @ label dsrc.anchor ) :: doc
       in
-      Table (elide_table @@ List.map one l) :: Break Line :: to_latex rest
+      Table (elide_table @@ List.map one l) :: to_latex rest
   in
   to_latex t
 
