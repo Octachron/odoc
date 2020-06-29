@@ -361,11 +361,12 @@ and small_table ppf tbl =
     let matrix ppf m = List.iter (row ppf) m in
     let rec repeat n s ppf = if n = 0 then () else
         Format.fprintf ppf "%c%t" s (repeat (n - 1) s) in
-    (* We are using pbox to be able to nest lists inside the tables *)
-    env "longtable"
+    let table ppf tbl = env "longtable"
       ~opts:[Format.dprintf "l"]
       ~args:[ repeat columns 'l' ]
-      matrix ppf tbl
+      matrix ppf tbl in
+    Format.fprintf ppf {|{\setlength{\LTpre}{0pt}\setlength{\LTpost}{0pt}%a}|}
+    table tbl
 
 
 
