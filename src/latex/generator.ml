@@ -213,14 +213,15 @@ let break level ppf motivation =
 
 let env name pp ?(with_break=false) ?(opts=[]) ?(args=[]) ppf content =
   mbegin ppf name;
-  Format.pp_print_list (fun ppf pp -> Format.fprintf ppf "[%t]" pp) ppf opts;
-  Format.pp_print_list (fun ppf pp -> Format.fprintf ppf "{%t}" pp) ppf args;
+  List.iter (Format.fprintf ppf "[%t]") opts;
+  List.iter (Format.fprintf ppf "{%t}") args;
   pp ppf content;
   mend ppf name;
   break (if with_break then Simple else Aesthetic) ppf "after env %s" name
 
 let inline_code = macro "inlinecode"
 let block_code = macro "blockcode"
+let sub pp ppf x = env "adjustwidth" ~args:[Format.dprintf "2em"; Format.dprintf "0pt"] pp ppf x
 
 
 let level_macro = function
@@ -316,7 +317,7 @@ let rec pp_elt ppf = function
   | Table { row_size=Large; tbl } -> large_table ppf tbl
   | Table { row_size=Small|Empty; tbl } -> small_table ppf tbl
   | Label x -> mlabel ppf x
-  | Subpage x -> env "adjustwidth" ~args:[Format.dprintf "2em"; Format.dprintf "0pt"] pp ppf x
+  | Subpage x ->  sub pp ppf x
   | _ -> .
 
 and pp ppf = function
@@ -338,19 +339,18 @@ and href ppf (l,txt) =
   | None -> Format.fprintf ppf {|\url{%s}|} l
 
 and large_table ppf tbl =
-    let columns = List.length (List.hd tbl) in
-    let row ppf x =
-      let ampersand ppf () = Format.fprintf ppf "& " in
-      Fmt.list ~sep:ampersand pp ppf x;
-      break Line ppf "row" in
-    let matrix ppf m = List.iter (row ppf) m in
-    let rec repeat n s ppf = if n = 0 then () else
-        Format.fprintf ppf "%t%t" s (repeat (n - 1) s) in
-    (* We are using pbox to be able to nest lists inside the tables *)
-    let frac ppf = Format.fprintf ppf " p{%.2f\\linewidth} " (1. /. float columns) in
-    env "longtable"
-      ~args:[ repeat columns frac  ]
-      matrix ppf tbl
+    let rec row ppf = function
+      | [] -> break Line ppf "row)"
+      | [a] -> pp ppf a
+      | a :: (_ :: _ as q) ->
+        Format.fprintf ppf "%a%a%a"
+          pp a
+          (break Aesthetic) "column"
+          (sub row) q  in
+    let matrix ppf m =
+
+      List.iter (row ppf) m in
+    sub matrix ppf tbl
 
 and small_table ppf tbl =
     let columns = List.length (List.hd tbl) in
