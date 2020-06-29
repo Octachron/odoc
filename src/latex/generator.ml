@@ -178,7 +178,7 @@ let mhyperref pp r ppf =
   | s, Some content ->
       let pp =
         if r.short then pp else
-          fun ppf x -> Fmt.pf ppf "%a[%a]" pp x (macro "ref*" escape_ref) s in
+          fun ppf x -> Fmt.pf ppf "%a[p%a]" pp x (macro "pageref*" escape_ref) s in
       macro "hyperref" ~options:[bind escape_ref s] pp ppf content
 
 
