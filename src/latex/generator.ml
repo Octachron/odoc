@@ -25,8 +25,9 @@ type break_hierarchy =
 
 type row_size =
   | Empty
-  | Small (** aka text only *)
-  | Large (** aka any thing goes *)
+  | Small (** text only *)
+  | Large (** No table *)
+  | Huge (** tables **)
 
 
 type elt =
@@ -270,23 +271,25 @@ let escape_entity  = function
 (*
 *)
 
-let is_text (x:elt) = match x with
-  | Txt _ | Internal_ref _ | External_ref _ | Label _ | Style _ | InlineCode _ | Tag _ | Break _ -> true
-  | List _ | Table _ | Section _ | Verbatim _ | Raw _ | BlockCode _ | Subpage _ | Description _-> false
+let elt_size (x:elt) = match x with
+  | Txt _ | Internal_ref _ | External_ref _ | Label _ | Style _ | InlineCode _ | Tag _ | Break _ -> Small
+  | List _ | Section _ | Verbatim _ | Raw _ | BlockCode _ | Subpage _ | Description _-> Large
+  | Table _  -> Huge
 
 let table = function
   | [] -> []
   | a :: _ as m ->
     let start = List.map (fun _ -> Empty) a in
-    let content_size = function
-      | [] -> Empty
-      | l when List.for_all is_text l -> Small
-      | _ -> Large  in
+    let content_size l = List.fold_left (fun s x -> max s (elt_size x)) Empty l in
     let row mask l = List.map2 (fun x y -> max x @@ content_size y) mask l in
     let mask = List.fold_left row start m in
-    let filter_empty = function Empty, _ -> None | (Small | Large), x -> Some x in
+    let filter_empty = function Empty, _ -> None | (Small | Large | Huge), x -> Some x in
     let filter_row row = List.filter_map filter_empty @@ List.combine mask row in
-    let row_size = List.fold_left max Empty (List.tl mask) in
+    let row_size = match mask with
+      | [] -> Empty
+      | Huge :: _ -> Huge (* we may have a table in the first column due to inlined record *)
+      | _ :: q -> (* otherwise, it is fine if the first column contains some code block *)
+         List.fold_left max Empty q in
     [Table { row_size; tbl= List.map filter_row m }]
 
 let rec pp_elt ppf = function
@@ -314,7 +317,7 @@ let rec pp_elt ppf = function
   | InlineCode x -> inline_code pp ppf x
   | List {typ; items} -> list typ pp ppf items
   | Description items -> description pp ppf items
-  | Table { row_size=Large; tbl } -> large_table ppf tbl
+  | Table { row_size=Large|Huge as size; tbl } -> large_table size ppf tbl
   | Table { row_size=Small|Empty; tbl } -> small_table ppf tbl
   | Label x -> mlabel ppf x
   | Subpage x ->  sub pp ppf x
@@ -338,7 +341,7 @@ and href ppf (l,txt) =
     Format.fprintf ppf {|\href{%s}{%a}|} l pp txt
   | None -> Format.fprintf ppf {|\url{%s}|} l
 
-and large_table ppf tbl =
+and large_table size ppf tbl =
     let rec row ppf = function
       | [] -> break Line ppf "row)"
       | [a] -> pp ppf a
@@ -350,7 +353,9 @@ and large_table ppf tbl =
     let matrix ppf m =
 
       List.iter (row ppf) m in
-    sub matrix ppf tbl
+    match size with
+    | Huge -> break Line ppf "before huge table"; matrix ppf tbl
+    | Large | _ -> sub matrix ppf tbl
 
 and small_table ppf tbl =
     let columns = List.length (List.hd tbl) in
