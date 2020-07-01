@@ -13,8 +13,6 @@ let rec list_concat_map ?sep ~f = function
     | Some sep -> hd @ sep :: tl
 
 
-type text_kind = Verbatim | Textual
-
 type break_hierarchy =
   | Aesthetic
   | Simple
@@ -31,7 +29,7 @@ type row_size =
 
 
 type elt =
-  | Txt of { kind: text_kind; words: string list }
+  | Txt of string list
   | Section of {level:int; label:string option; content:t }
   | Verbatim of string
   | Internal_ref of reference
@@ -40,8 +38,9 @@ type elt =
   | Raw of string
   | Tag of string * t
   | Style of [`Emphasis|`Bold|`Superscript|`Subscript|`Italic] * t
-  | BlockCode of t
-  | InlineCode of t
+  | Code_block of t
+  | Inlined_code of t
+  | Code_fragment of t
   | Break of break_hierarchy
   | List of { typ : Block.list_type; items: t list }
   | Description of (t * t) list
@@ -63,12 +62,9 @@ let macro name ?(options=[]) pp ppf content =
     (Format.pp_print_list option) options
     pp content
 
-
-
-
-let escape_text =
+let escape_text ~code_hyphenation  =
   let b = Buffer.create 17 in
-  fun ppf s ->
+  fun s ->
     for i = 0 to String.length s - 1 do
       match s.[i] with
       | '{' -> Buffer.add_string b "\\{"
@@ -77,7 +73,11 @@ let escape_text =
       | '%' ->  Buffer.add_string b "\\%"
       | '~' ->  Buffer.add_string b "\\textasciitilde{}"
       | '^' -> Buffer.add_string b "\\textasciicircum{}"
-      | '_' ->  Buffer.add_string b "\\_"
+      | '_' ->  Buffer.add_string b {|\_\allowbreak{}|}
+      | '.' when code_hyphenation ->  Buffer.add_string b {|.\allowbreak{}|}
+      | ';' when code_hyphenation ->  Buffer.add_string b {|;\allowbreak{}|}
+      | ',' when code_hyphenation ->  Buffer.add_string b {|,\allowbreak{}|}
+
       | '&' ->  Buffer.add_string b "\\&"
       | '#' ->  Buffer.add_string b "\\#"
       | '$' ->  Buffer.add_string b "\\$"
@@ -87,43 +87,7 @@ let escape_text =
     done;
     let s = Buffer.contents b in
     Buffer.reset b;
-    Fmt.string ppf s
-
-let escape_verbatim_text =
-  let b = Buffer.create 17 in
-  fun ppf s ->
-    let rec normal i =
-      if i = String.length s then () else
-      match s.[i] with
-      | '{' ->  Buffer.add_string b "\\{"                 ; normal (i+1)
-      | '}' ->  Buffer.add_string b "\\}"                 ; normal (i+1)
-      | '\\' -> Buffer.add_string b "\\textbackslash{}"   ; normal (i+1)
-      | '%' ->  Buffer.add_string b "\\%"                 ; normal (i+1)
-      | '~' ->  Buffer.add_string b "\\textasciitilde{}"  ; normal (i+1)
-      | '^' ->  Buffer.add_string b "\\textasciicircum{}" ; normal (i+1)
-      | '_' ->  Buffer.add_string b "\\_"                 ; normal (i+1)
-      | '&' ->  Buffer.add_string b "\\&"                 ; normal (i+1)
-      | '#' ->  Buffer.add_string b "\\#"                 ; normal (i+1)
-      | '$' ->  Buffer.add_string b "\\$"                 ; normal (i+1)
-
-      | '\n' -> Buffer.add_string b "\\\\\n"              ; after_newline (i+1)
-
-      | c ->  Buffer.add_char b c                         ; normal (i+1)
-    and after_newline i =
-      if i = String.length s then () else
-        match s.[i] with
-        | ' ' -> Buffer.add_string b {|\-|}; indent (i+1)
-        | _ -> normal i
-    and indent i =
-      if i = String.length s then () else
-        match s.[i] with
-        | ' ' -> Buffer.add_string  b {|\ |}; indent (i+1)
-        | _ -> normal i in
-    let () = normal 0 in
-    let s = Buffer.contents b in
-    Buffer.reset b;
-    Fmt.string ppf s
-
+    s
 
 let escape_ref ppf s =
   for i = 0 to String.length s - 1 do
@@ -182,9 +146,6 @@ let mhyperref pp r ppf =
           fun ppf x -> Fmt.pf ppf "%a[p%a]" pp x (macro "pageref*" escape_ref) s in
       macro "hyperref" ~options:[bind escape_ref s] pp ppf content
 
-
-let texttt ppf s = escape_verbatim_text ppf s
-
 let label = function
   | None -> []
   | Some  x (* {Odoc_document.Url.Anchor.anchor ; page;  _ }*) -> [Label (Link.label  x)]
@@ -221,7 +182,17 @@ let env name pp ?(with_break=false) ?(opts=[]) ?(args=[]) ppf content =
   break (if with_break then Simple else Aesthetic) ppf "after env %s" name
 
 let inline_code = macro "inlinecode"
-let block_code = macro "blockcode"
+let code_block pp ppf x =
+  let name = "ocamlcodeblock" in
+  mbegin ppf name;
+  Fmt.cut ppf ();
+  pp ppf x;
+  Fmt.cut ppf ();
+  mend ppf name
+
+let code_fragment = macro "codefragment"
+
+
 let sub pp ppf x = env "adjustwidth" ~args:[Format.dprintf "2em"; Format.dprintf "0pt"] pp ppf x
 
 
@@ -268,12 +239,9 @@ let escape_entity  = function
 
 
 
-(*
-*)
-
 let elt_size (x:elt) = match x with
-  | Txt _ | Internal_ref _ | External_ref _ | Label _ | Style _ | InlineCode _ | Tag _ | Break _ -> Small
-  | List _ | Section _ | Verbatim _ | Raw _ | BlockCode _ | Subpage _ | Description _-> Large
+  | Txt _ | Internal_ref _ | External_ref _ | Label _ | Style _ | Inlined_code _ | Code_fragment _ | Tag _ | Break _ -> Small
+  | List _ | Section _ | Verbatim _ | Raw _ | Code_block _ | Subpage _ | Description _-> Large
   | Table _  -> Huge
 
 let table = function
@@ -285,19 +253,14 @@ let table = function
     let mask = List.fold_left row start m in
     let filter_empty = function Empty, _ -> None | (Small | Large | Huge), x -> Some x in
     let filter_row row = List.filter_map filter_empty @@ List.combine mask row in
-    let row_size = match mask with
-      | [] -> Empty
-      | Huge :: _ -> Huge (* we may have a table in the first column due to inlined record *)
-      | _ :: q -> (* otherwise, it is fine if the first column contains some code block *)
-         List.fold_left max Empty q in
+    let row_size = List.fold_left max Empty mask in
     [Table { row_size; tbl= List.map filter_row m }]
 
+let txt ~verbatim ~in_source ws = if verbatim then Txt ws else Txt (List.map (escape_text ~code_hyphenation:in_source) ws)
+
 let rec pp_elt ppf = function
-  | Txt { kind; words } ->
-    let word_printer = match kind with
-      | Textual -> escape_text
-      | Verbatim -> texttt in
-    Format.pp_print_list word_printer ~pp_sep:none ppf words
+  | Txt words ->
+    Fmt.list Fmt.string ~sep:none ppf words
   | Section {level; label; content } ->
     let with_label ppf (label,content) =
       pp ppf content;
@@ -312,9 +275,10 @@ let rec pp_elt ppf = function
   | Internal_ref r -> hyperref ppf r
   | External_ref (l,x) -> href ppf (l,x)
   | Style (s,x) -> mstyle s pp ppf x
-  | BlockCode [] -> ()
-  | BlockCode x -> block_code pp ppf x
-  | InlineCode x -> inline_code pp ppf x
+  | Code_block [] -> ()
+  | Code_block x -> code_block pp ppf x
+  | Inlined_code x -> inline_code pp ppf x
+  | Code_fragment x -> code_fragment pp ppf x
   | List {typ; items} -> list typ pp ppf items
   | Description items -> description pp ppf items
   | Table { row_size=Large|Huge as size; tbl } -> large_table size ppf tbl
@@ -373,54 +337,49 @@ and small_table ppf tbl =
     Format.fprintf ppf {|{\setlength{\LTpre}{0pt}\setlength{\LTpost}{0pt}%a}|}
     table tbl
 
-
-
 let raw_markup (t:Raw_markup.t) =
   match t with
   | `Latex, c -> [Raw c]
   | _ -> []
-
-
 
 let source k (t : Source.t) =
   let rec token (x : Source.token) = match x with
     | Elt i -> k i
     | Tag (None, l) -> tokens l
     | Tag (Some s, l) -> [Tag(s, tokens l)]
-  and tokens t = list_concat_map t ~f:token
-  in
+  and tokens t = list_concat_map t ~f:token in
   tokens t
 
 
-let rec internalref ~in_source (t : InternalLink.t) =
+let rec internalref ~verbatim ~in_source (t : InternalLink.t) =
   match t with
   | Resolved (uri, content) ->
     let target = Link.label uri in
-    let content = Some (inline ~in_source content) in
+    let content = Some (inline ~verbatim ~in_source content) in
     let short = in_source in
     Internal_ref { short; content; target }
   | Unresolved content ->
     let target = "xref-unresolved" in
-    let content = Some (inline ~in_source content) in
+    let content = Some (inline ~verbatim ~in_source content) in
     let short = in_source in
     Internal_ref { short; target; content }
 
-and inline ~in_source (l : Inline.t) =
+and inline ~in_source ~verbatim (l : Inline.t) =
   let one (t : Inline.one) =
     match t.desc with
     | Text _s -> assert false
     | Linebreak -> [Break Line]
     | Styled (style, c) ->
-      [Style(style, inline ~in_source c)]
+      [Style(style, inline ~verbatim ~in_source c)]
     | Link (ext, c) ->
-      let content = inline ~in_source:false  c in
+      let content = inline ~verbatim:false ~in_source:false  c in
       [External_ref(ext, Some content)]
     | InternalLink c ->
-      [internalref ~in_source c]
+      [internalref ~in_source ~verbatim c]
     | Source c ->
-      [InlineCode (source (inline ~in_source:true) c)]
+      [Inlined_code (source (inline ~verbatim:false ~in_source:true) c)]
     | Raw_markup r -> raw_markup r
-    | Entity s -> [Txt { kind=if in_source then Verbatim else Textual; words = [escape_entity s]}] in
+    | Entity s -> [txt ~in_source ~verbatim:true [escape_entity s]] in
 
   let take_text (l: Inline.t) =
     Doctree.Take.until l ~classify:(function
@@ -435,42 +394,49 @@ and inline ~in_source (l : Inline.t) =
       let words, _, rest = take_text l in
       let text =
           let words = List.filter (( <> ) "" ) words in
-          [Txt { kind = if in_source then Verbatim else Textual; words }]
+          txt ~in_source ~verbatim words
       in
-      text @ prettify rest
+      text :: prettify rest
     | o :: q -> one o @ prettify q
     | [] -> [] in
   prettify l
 
 let heading (h : Heading.t) =
-  let content = inline ~in_source:false h.title in
+  let content = inline ~in_source:false ~verbatim:false h.title in
   [Section { label=h.label; level=h.level; content }; Break Aesthetic]
 
-let non_empty_block_code ~in_source c =
-  let s = source (inline ~in_source:true) c in
+let non_empty_block_code ~in_source:_ c =
+  let s = source (inline ~verbatim:true ~in_source:true) c in
   match s with
   | [] -> []
   | _ :: _ as l ->
-    if in_source then [BlockCode l] else [Break Separation; BlockCode l; Break Separation]
+     (*if in_source then [Code_block l] else *) [Break Separation; Code_block l; Break Separation]
 
+
+let non_empty_code_fragment ~in_source c =
+  let s = source (inline ~verbatim:false ~in_source:true) c in
+  match s with
+  | [] -> []
+  | _ :: _ as l ->
+    if in_source then [Code_fragment l] else [Break Separation; Code_fragment l; Break Separation]
 
 
 let rec block ~in_source (l: Block.t)  =
   let one (t : Block.one) =
     match t.desc with
     | Inline i ->
-      inline ~in_source:false i
+      inline ~verbatim:false ~in_source:false i
     | Paragraph i ->
-      inline ~in_source:false i @ if in_source then [] else [Break Paragraph]
+      inline ~in_source:false ~verbatim:false i @ if in_source then [] else [Break Paragraph]
     | List (typ, l) ->
       [List { typ; items = List.map (block ~in_source:false) l }]
     | Description l ->
       [Description (List.map (fun (i,b) ->
-          inline ~in_source i,
+          inline ~in_source ~verbatim:false i,
           block ~in_source b
       ) l)]
-   | Raw_markup r ->
-      raw_markup r
+    | Raw_markup r ->
+       raw_markup r
     | Verbatim s -> [Verbatim s]
     | Source c -> non_empty_block_code ~in_source c
   in
@@ -500,13 +466,13 @@ let rec documentedSrc (t : DocumentedSrc.t) =
         )
       in
       let code, _, rest = take_code t in
-      non_empty_block_code code ~in_source:true
+      non_empty_code_fragment ~in_source:true code
       @ to_latex rest
     | Alternative (Expansion e) :: rest ->
       begin if Link.should_inline e.url then
         to_latex e.expansion
       else
-        non_empty_block_code e.summary ~in_source:true
+        non_empty_code_fragment e.summary ~in_source:true
     end
         @ to_latex rest
     | Subpage subp :: rest ->
@@ -525,7 +491,7 @@ let rec documentedSrc (t : DocumentedSrc.t) =
       let l, _, rest = take_descr t in
       let one dsrc =
         let content = match dsrc.code with
-          | `D code -> inline ~in_source:true code
+          | `D code -> inline ~verbatim:false ~in_source:true code
           | `N n -> to_latex n
         in
         let doc = [block ~in_source:true dsrc.doc] in
@@ -561,7 +527,7 @@ and items l =
       :: rest ->
       let included = items content  in
       let docs = block ~in_source:true  doc in
-      let summary = source (inline ~in_source:true) summary in
+      let summary = source (inline ~verbatim:false ~in_source:true) summary in
       let content = included in
       (label anchor @ docs @ summary @ content)
       |> continue_with rest

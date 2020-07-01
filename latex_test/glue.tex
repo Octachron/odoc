@@ -2,17 +2,53 @@
 \usepackage{alltt}
 \usepackage[colorlinks=true]{hyperref}
 \usepackage{color}
+\usepackage{listings}
 \usepackage{lmodern}
 \usepackage[T1]{fontenc}
 \usepackage{longtable}
 \usepackage{changepage}
-\newcommand{\blockcode}[1]{{\setlength{\parindent}{0cm}#1}}
+\newcommand{\codefragment}[1]{{\setlength{\parindent}{0cm}#1}}
 \newcommand{\inlinecode}[1]{#1}
 
 
 \newenvironment{keyword}{\bfseries}{}
 \newenvironment{constructor}{\bfseries}{}
 \newenvironment{type-var}{\itshape\ttfamily}{}
+
+
+\newcommand{\ocamlkeyword}{\keyword}
+\newcommand{\ocamlhighlight}{\bfseries\uline}
+\newcommand{\ocamlerror}{\bfseries}
+\newcommand{\ocamlwarning}{\bfseries}
+
+\definecolor{gray}{gray}{0.5}
+\newcommand{\ocamlcomment}{\color{gray}\normalfont\small}
+\newcommand{\ocamlstring}{\color{gray}\bfseries}
+
+
+
+\lstnewenvironment{ocamlcodeblock}{
+  \lstset{
+    basicstyle=\ttfamily,
+    showstringspaces=false,
+    language=caml,
+    escapeinside={$}{$},
+    columns=fullflexible,
+    stringstyle=\ocamlstring,
+    commentstyle=\ocamlcomment,
+    keepspaces=true,
+    keywordstyle=\ocamlkeyword,
+    moredelim=[is][\ocamlhighlight]{<<}{>>},
+    moredelim=[s][\ocamlstring]{\{|}{|\}},
+    moredelim=[s][\ocamlstring]{\{delimiter|}{|delimiter\}},
+    keywords={[2]{val,initializer,nonrec}}, keywordstyle={[2]\ocamlkeyword},
+    belowskip=0\baselineskip,
+    upquote=true,
+    literate={'"'}{\textquotesingle "\textquotesingle}3
+    {'\\"'}{\textquotesingle \textbackslash"\textquotesingle}4,
+  }
+  }{}
+
 
 %\renewcommand{\arraystretch}{0.5}
 
