@@ -108,7 +108,7 @@ $(latex_files):output/%.tex: %.odoc
 	  $(odoc) latex --output-dir . -I . $<
 
 $(html_files):output/%.html: %.odoc
-	  $(odoc) html --output-dir . $<
+	  $(odoc) html --output-dir . -I . $<
 
 
 include .depend
