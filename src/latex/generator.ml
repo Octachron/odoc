@@ -70,7 +70,9 @@ let escape_text ~code_hyphenation  =
       | '%' ->  Buffer.add_string b "\\%"
       | '~' ->  Buffer.add_string b "\\textasciitilde{}"
       | '^' -> Buffer.add_string b "\\textasciicircum{}"
-      | '_' ->  Buffer.add_string b {|\_\allowbreak{}|}
+      | '_' ->
+        if code_hyphenation then Buffer.add_string b {|\_\allowbreak{}|}
+        else Buffer.add_string b {|\_|}
       | '.' when code_hyphenation ->  Buffer.add_string b {|.\allowbreak{}|}
       | ';' when code_hyphenation ->  Buffer.add_string b {|;\allowbreak{}|}
       | ',' when code_hyphenation ->  Buffer.add_string b {|,\allowbreak{}|}
@@ -307,10 +309,12 @@ and pp ppf = function
 and hyperref ppf r = mhyperref pp r ppf
 
 and href ppf (l,txt) =
+  let url ppf s = macro "url" Fmt.string ppf (escape_text ~code_hyphenation:false s) in
+  let footnote = macro "footnote" url in
   match txt with
   | Some txt ->
-    Fmt.pf ppf {|\href{%s}{%a}|} l pp txt
-  | None -> macro "url" Fmt.string ppf l
+    Fmt.pf ppf {|\href{%s}{%a}%a|} l pp txt footnote l
+  | None ->  url ppf l
 
 and large_table size ppf tbl =
     let rec row ppf = function
