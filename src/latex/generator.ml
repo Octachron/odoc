@@ -405,21 +405,18 @@ let heading (h : Heading.t) =
   let content = inline ~in_source:false ~verbatim:false h.title in
   [Section { label=h.label; level=h.level; content }; Break Aesthetic]
 
-let non_empty_block_code ~in_source:_ c =
+let non_empty_block_code  c =
   let s = source (inline ~verbatim:true ~in_source:true) c in
   match s with
   | [] -> []
-  | _ :: _ as l ->
-     (*if in_source then [Code_block l] else *) [Break Separation; Code_block l; Break Separation]
+  | _ :: _ as l -> [Break Separation; Code_block l; Break Separation]
 
 
-let non_empty_code_fragment ~in_source c =
+let non_empty_code_fragment c =
   let s = source (inline ~verbatim:false ~in_source:true) c in
   match s with
   | [] -> []
-  | _ :: _ as l ->
-    if in_source then [Code_fragment l] else [Break Separation; Code_fragment l; Break Separation]
-
+  | _ :: _ as l -> [Code_fragment l]
 
 let rec block ~in_source (l: Block.t)  =
   let one (t : Block.one) =
@@ -438,7 +435,7 @@ let rec block ~in_source (l: Block.t)  =
     | Raw_markup r ->
        raw_markup r
     | Verbatim s -> [Verbatim s]
-    | Source c -> non_empty_block_code ~in_source c
+    | Source c -> non_empty_block_code c
   in
   list_concat_map l ~f:one
 
@@ -466,13 +463,13 @@ let rec documentedSrc (t : DocumentedSrc.t) =
         )
       in
       let code, _, rest = take_code t in
-      non_empty_code_fragment ~in_source:true code
+      non_empty_code_fragment code
       @ to_latex rest
     | Alternative (Expansion e) :: rest ->
       begin if Link.should_inline e.url then
         to_latex e.expansion
       else
-        non_empty_code_fragment e.summary ~in_source:true
+        non_empty_code_fragment e.summary
     end
         @ to_latex rest
     | Subpage subp :: rest ->
