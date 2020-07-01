@@ -118,7 +118,7 @@ end = DocumentedSrc
 
 and Alternative : sig
   type t =
-    | Expansion of { summary: Source.t; expansion: DocumentedSrc.t; url: Url.Path.t }
+    | Expansion of { status: [ `Inline | `Open | `Closed | `Default ]; summary: Source.t; expansion: DocumentedSrc.t; url: Url.Path.t }
 
 end =
   Alternative

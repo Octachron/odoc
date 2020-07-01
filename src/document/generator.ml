@@ -80,7 +80,7 @@ let attach_expansion ?(status=`Default) (eq, o, e) page text =
       @ DocumentedSrc.[Subpage { status ; content = page }]
       @ O.documentedSrc (O.keyword e)
     in
-    DocumentedSrc.[Alternative (Expansion { summary; url ; expansion })]
+    DocumentedSrc.[Alternative (Expansion { summary; url ; status; expansion })]
 
 include Generator_signatures
 
@@ -1216,7 +1216,7 @@ struct
               @ DocumentedSrc.[Subpage { content ; status }]
               @ O.documentedSrc (O.keyword "end")
             in
-            DocumentedSrc.[ Alternative (Expansion {summary; url; expansion })]
+            DocumentedSrc.[ Alternative (Expansion {status=`Default; summary; url; expansion })]
           in
           O.documentedSrc (O.keyword "module" ++ O.txt " " ++ modname)
           @ modtyp
@@ -1283,21 +1283,22 @@ struct
       Item.t
     = fun recursive t ->
       let modname = Paths.Identifier.name t.id in
-      let modname, expansion =
+      let modname, status, expansion =
         match t.expansion with
         | None ->
           O.documentedSrc (O.txt modname),
+          `Default,
           None
         | Some expansion ->
-          let expansion =
+          let status, expansion =
             match expansion with
             | AlreadyASig ->
               begin match t.type_ with
               | ModuleType (Odoc_model.Lang.ModuleType.Signature sg) ->
-                Odoc_model.Lang.Module.Signature sg
+                `Inline, Odoc_model.Lang.Module.Signature sg
               | _ -> assert false
               end
-            | e -> e
+            | e -> `Default, e
           in
           let doc = Comment.standalone t.doc in
           let prelude, items = module_expansion expansion in
@@ -1308,7 +1309,7 @@ struct
             format_title `Mod (make_name_from_path url) @ doc @ prelude
           in
           let page = {Page.items ; title ; header ; url } in
-          O.documentedSrc link, Some page
+          O.documentedSrc link, status, Some page
       in
       let summary =
         module_decl (t.id :> Paths.Identifier.Signature.t)
@@ -1318,6 +1319,7 @@ struct
       in
       let modexpr =
         attach_expansion
+          ~status
           (Syntax.Type.annotation_separator,"sig","end")
           expansion summary
       in

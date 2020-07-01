@@ -123,7 +123,10 @@ module Link = struct
       end
     | _ -> false
 
-  let should_inline x = not @@ is_class_or_module_path x
+  let should_inline status url = match status with
+    | `Inline | `Open -> true
+    | `Closed -> false
+    | `Default -> not @@ is_class_or_module_path url
 
 
 end
@@ -479,7 +482,7 @@ let rec documentedSrc (t : DocumentedSrc.t) =
       non_empty_code_fragment code
       @ to_latex rest
     | Alternative (Expansion e) :: rest ->
-      begin if Link.should_inline e.url then
+      begin if Link.should_inline e.status e.url then
         to_latex e.expansion
       else
         non_empty_code_fragment e.summary
@@ -571,7 +574,7 @@ module Page = struct
   let on_sub = function
     | `Inline _ | `Subpage |  _ -> Some 1
 
-  let rec subpage (p:Subpage.t) = if Link.should_inline p.content.url then [] else [ page p.content ]
+  let rec subpage (p:Subpage.t) = if Link.should_inline p.status p.content.url then [] else [ page p.content ]
 
   and subpages i =
     List.flatten @@ List.map subpage @@ Doctree.Subpages.compute i
