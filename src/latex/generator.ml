@@ -256,7 +256,12 @@ let table = function
     let row_size = List.fold_left max Empty mask in
     [Table { row_size; tbl= List.map filter_row m }]
 
-let txt ~verbatim ~in_source ws = if verbatim then Txt ws else Txt (List.map (escape_text ~code_hyphenation:in_source) ws)
+let txt ~verbatim ~in_source ws =
+  if verbatim then [Txt ws] else
+    let escaped = List.map (escape_text ~code_hyphenation:in_source) ws in
+    match List.filter ( (<>) "" ) escaped with
+    | [] -> []
+    | l -> [ Txt l ]
 
 let rec pp_elt ppf = function
   | Txt words ->
@@ -379,7 +384,7 @@ and inline ~in_source ~verbatim (l : Inline.t) =
     | Source c ->
       [Inlined_code (source (inline ~verbatim:false ~in_source:true) c)]
     | Raw_markup r -> raw_markup r
-    | Entity s -> [txt ~in_source ~verbatim:true [escape_entity s]] in
+    | Entity s -> txt ~in_source ~verbatim:true [escape_entity s] in
 
   let take_text (l: Inline.t) =
     Doctree.Take.until l ~classify:(function
@@ -392,11 +397,8 @@ and inline ~in_source ~verbatim (l : Inline.t) =
   let rec prettify = function
     | { Inline.desc = Inline.Text _; _ } :: _ as l ->
       let words, _, rest = take_text l in
-      let text =
-          let words = List.filter (( <> ) "" ) words in
-          txt ~in_source ~verbatim words
-      in
-      text :: prettify rest
+      txt ~in_source ~verbatim words
+      @ prettify rest
     | o :: q -> one o @ prettify q
     | [] -> [] in
   prettify l
