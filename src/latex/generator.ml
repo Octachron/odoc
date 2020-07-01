@@ -571,8 +571,12 @@ end
 
 module Page = struct
 
+
+
   let on_sub = function
-    | `Inline _ | `Subpage |  _ -> Some 1
+    | `Page _ -> Some 1
+    | `Include _ -> None
+
 
   let rec subpage (p:Subpage.t) = if Link.should_inline p.status p.content.url then [] else [ page p.content ]
 
