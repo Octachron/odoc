@@ -50,17 +50,13 @@ type elt =
 
 and t = elt list
 and reference = { short:bool; target:string; content: t option }
+let const s ppf = Fmt.pf ppf s
 
 
-
-
-let str = Format.pp_print_string
-
-
-let option ppf pp = Format.fprintf ppf "[%t]" pp
+let option ppf pp = Fmt.pf ppf "[%t]" pp
 let macro name ?(options=[]) pp ppf content =
-  Format.fprintf ppf {|\%s%a{%a}|} name
-    (Format.pp_print_list option) options
+  Fmt.pf ppf {|\%s%a{%a}|} name
+    (Fmt.list option) options
     pp content
 
 let escape_text ~code_hyphenation  =
@@ -93,27 +89,29 @@ let escape_text ~code_hyphenation  =
 let escape_ref ppf s =
   for i = 0 to String.length s - 1 do
     match s.[i] with
-    | '~' -> Format.fprintf ppf "+t+"
-    | '_' -> Format.fprintf ppf "+u+"
-    | '+' -> Format.fprintf ppf "+++"
-    | c -> Format.fprintf ppf "%c" c
+    | '~' -> Fmt.pf ppf "+t+"
+    | '_' -> Fmt.pf  ppf "+u+"
+    | '+' -> Fmt.pf ppf "+++"
+    | c -> Fmt.pf ppf "%c" c
   done
 
 module Link = struct
 
   let rec flatten_path ppf (x: Odoc_document.Url.Path.t) = match x.parent with
-    | Some p -> Format.fprintf ppf "%a-%s-%s" flatten_path p x.kind x.name
-    | None -> Format.fprintf ppf "%s-%s" x.kind x.name
+    | Some p -> Fmt.pf ppf "%a-%s-%s" flatten_path p x.kind x.name
+    | None -> Fmt.pf ppf "%s-%s" x.kind x.name
 
  let page p =
-   Format.asprintf "%a-"
-     flatten_path p
+   Fmt.str "%a" flatten_path p
 
 
  let label (x:Odoc_document.Url.t) =
-   Format.asprintf "%a-%s"
-     flatten_path x.page
-     x.anchor
+   match x.anchor with
+   | "" -> page x.page
+   | anchor ->
+       Fmt.str "%a-%s"
+       flatten_path x.page
+       anchor
 
   let rec is_class_or_module_path (url : Odoc_document.Url.Path.t) = match url.kind with
     | "module" | "package" | "class" ->
@@ -135,9 +133,9 @@ end
 
 let bind pp x ppf = pp ppf x
 let mlabel ppf = macro "label" escape_ref ppf
-let verbatim = macro "verbatim" str
-let mbegin ?options = macro "begin" ?options str
-let mend = macro "end" str
+let verbatim = macro "verbatim" Fmt.string
+let mbegin ?options = macro "begin" ?options Fmt.string
+let mend = macro "end" Fmt.string
 let mhyperref pp r ppf =
   match r.target, r.content with
   | "", None -> ()
@@ -164,26 +162,24 @@ let mstyle = function
 
 
 
-let break level ppf motivation =
+let break ppf level =
   let pre: _ format6 = match level with
+    | Aesthetic -> "%%"
     | Line -> {|\\|}
     | Separation -> {|\medbreak|}
     | _ -> "" in
   let post: _ format6 = match level with
-    | Line | Separation | Aesthetic | Simple -> "@,"
-    | Paragraph -> "@,@," in
-  let fmt : _ format6 = match level with
-    | Simple | Paragraph -> pre ^^ post ^^ "%%" ^^ motivation ^^ "@," (* "\n%Comment\n" *)
-    | Aesthetic | Line | Separation -> pre ^^ "%%" ^^ motivation ^^ post in
-  Fmt.pf ppf fmt
+    | Line | Separation | Aesthetic | Simple -> ""
+    | Paragraph -> "@," in
+  Fmt.pf ppf (pre ^^ "@," ^^ post)
 
 let env name pp ?(with_break=false) ?(opts=[]) ?(args=[]) ppf content =
   mbegin ppf name;
-  List.iter (Format.fprintf ppf "[%t]") opts;
-  List.iter (Format.fprintf ppf "{%t}") args;
+  List.iter (Fmt.pf ppf "[%t]") opts;
+  List.iter (Fmt.pf ppf "{%t}") args;
   pp ppf content;
   mend ppf name;
-  break (if with_break then Simple else Aesthetic) ppf "after env %s" name
+  break ppf (if with_break then Simple else Aesthetic)
 
 let inline_code = macro "inlinecode"
 let code_block pp ppf x =
@@ -195,9 +191,7 @@ let code_block pp ppf x =
   mend ppf name
 
 let code_fragment = macro "codefragment"
-
-
-let sub pp ppf x = env "adjustwidth" ~args:[Format.dprintf "2em"; Format.dprintf "0pt"] pp ppf x
+let sub pp ppf x = env "adjustwidth" ~args:[const "2em"; const "0pt"] pp ppf x
 
 
 let level_macro = function
@@ -206,11 +200,7 @@ let level_macro = function
   | 2 -> macro "subsubsection"
   | 3 | _ -> macro "paragraph"
 
-
-let _space ppf () = Format.fprintf ppf " "
-let _dotted_space ppf ()=Format.pp_print_string ppf "."
 let none _ppf () = ()
-
 
 let list kind pp ppf x =
   let list =
@@ -219,18 +209,18 @@ let list kind pp ppf x =
     | Unordered -> env "itemize" in
   let elt ppf = macro "item" pp ppf in
   list
-    (Fmt.list ~sep:(fun ppf () -> break Aesthetic ppf "list") elt)
+    (Fmt.list ~sep:(fun ppf () -> break ppf Aesthetic) elt)
     ppf
     x
 
 let description pp ppf x =
   let elt ppf (d,elt) = macro "item" ~options:[bind pp d] pp ppf elt in
   let all ppf x =
-    Format.fprintf ppf
+    Fmt.pf ppf
       {|\kern-\topsep
 \makeatletter\advance\%@topsepadd-\topsep\makeatother%% topsep is hardcoded
 |};
-    Fmt.list ~sep:(fun ppf () -> break Aesthetic ppf "description") elt ppf x in
+    Fmt.list ~sep:(fun ppf () -> break ppf Aesthetic) elt ppf x in
   env "description" all ppf x
 
 
@@ -272,8 +262,6 @@ let entity ~in_source ~verbatim x =
   else
     Txt [escape_entity x]
 
-
-
 let rec pp_elt ppf = function
   | Txt words ->
     Fmt.list Fmt.string ~sep:none ppf words
@@ -284,8 +272,8 @@ let rec pp_elt ppf = function
       | None -> ()
       | Some label -> mlabel ppf label in
     level_macro level with_label ppf (label,content)
-  | Break lvl -> break lvl ppf "elt"
-  | Raw s -> str ppf s
+  | Break lvl -> break ppf lvl
+  | Raw s -> Fmt.string ppf s
   | Tag (x,t) -> env ~with_break:true x pp ppf t
   | Verbatim s -> verbatim ppf s
   | Internal_ref r -> hyperref ppf r
@@ -321,39 +309,39 @@ and hyperref ppf r = mhyperref pp r ppf
 and href ppf (l,txt) =
   match txt with
   | Some txt ->
-    Format.fprintf ppf {|\href{%s}{%a}|} l pp txt
-  | None -> Format.fprintf ppf {|\url{%s}|} l
+    Fmt.pf ppf {|\href{%s}{%a}|} l pp txt
+  | None -> macro "url" Fmt.string ppf l
 
 and large_table size ppf tbl =
     let rec row ppf = function
-      | [] -> break Line ppf "row)"
+      | [] -> break ppf Line
       | [a] -> pp ppf a
       | a :: (_ :: _ as q) ->
-        Format.fprintf ppf "%a%a%a"
+        Fmt.pf ppf "%a%a%a"
           pp a
-          (break Aesthetic) "column"
+          break Aesthetic
           (sub row) q  in
     let matrix ppf m =
 
       List.iter (row ppf) m in
     match size with
-    | Huge -> break Line ppf "before huge table"; matrix ppf tbl
+    | Huge -> break ppf Line; matrix ppf tbl
     | Large | _ -> sub matrix ppf tbl
 
 and small_table ppf tbl =
     let columns = List.length (List.hd tbl) in
     let row ppf x =
-      let ampersand ppf () = Format.fprintf ppf "& " in
+      let ampersand ppf () = Fmt.pf ppf "& " in
       Fmt.list ~sep:ampersand pp ppf x;
-      break Line ppf "row" in
+      break ppf Line in
     let matrix ppf m = List.iter (row ppf) m in
     let rec repeat n s ppf = if n = 0 then () else
-        Format.fprintf ppf "%c%t" s (repeat (n - 1) s) in
+        Fmt.pf ppf "%c%t" s (repeat (n - 1) s) in
     let table ppf tbl = env "longtable"
-      ~opts:[Format.dprintf "l"]
+      ~opts:[const "l"]
       ~args:[ repeat columns 'l' ]
       matrix ppf tbl in
-    Format.fprintf ppf {|{\setlength{\LTpre}{0pt}\setlength{\LTpost}{0pt}%a}|}
+    Fmt.pf ppf {|{\setlength{\LTpre}{0pt}\setlength{\LTpost}{0pt}%a}|}
     table tbl
 
 let raw_markup (t:Raw_markup.t) =
@@ -559,13 +547,13 @@ and items l =
 
 module Doc = struct
 
-let make  url filename content children =
+let make url filename content children =
   let label = Label (Link.page url) in
   let content = match content with
     | [] -> [label]
     | Section _ as s  :: q -> s :: label :: q
     | q -> label :: q in
-  let content ppf = Format.fprintf ppf "@[<v>%a@]@." pp content in
+  let content ppf = Fmt.pf ppf "@[<v>%a@]@." pp content in
   {Odoc_document.Renderer. filename; content; children }
 end
 
