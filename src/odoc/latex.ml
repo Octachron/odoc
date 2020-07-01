@@ -64,7 +64,7 @@ let traverse ~f t =
   aux [] t
 
 
-let from_odoc ~env ?(syntax=Renderer.OCaml) ~output:root_dir input =
+let from_odoc ~env ?(syntax=Renderer.OCaml) ?(with_children=true) ~output:root_dir input =
   Root.read input >>= fun root ->
   match root.file with
   | Page page_name ->
@@ -88,7 +88,7 @@ let from_odoc ~env ?(syntax=Renderer.OCaml) ~output:root_dir input =
       let page_name = String.concat ~sep:"." (List.rev @@ name :: parents) in
       with_tex_file ~pkg_dir ~page_name (fun ppf ->
         content ppf;
-        link_children pkg_dir parents name children_names ppf
+        if with_children then link_children pkg_dir parents name children_names ppf
       )
     );
     Ok ()

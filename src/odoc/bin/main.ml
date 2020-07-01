@@ -340,10 +340,10 @@ module Odoc_latex : sig
   val info: Term.info
 end = struct
 
-  let latex directories output_dir syntax input_file =
+  let latex directories output_dir syntax with_children input_file =
     let env = Env.create ~important_digests:false ~directories in
     let file = Fs.File.of_string input_file in
-    Latex.from_odoc ~env ~syntax ~output:output_dir file
+    Latex.from_odoc ~env ~syntax ~output:output_dir ~with_children file
 
   let cmd =
     let input =
@@ -356,9 +356,14 @@ end = struct
       in
       Arg.(value & opt (pconv convert_syntax) (Odoc_document.Renderer.OCaml) @@ info ~docv:"SYNTAX" ~doc ~env ["syntax"])
     in
+    let with_children =
+      let doc = "Include children at the end of the page" in
+      Arg.(value & opt bool true & info ~docv:"BOOL" ~doc ["with-children"])
+    in
     Term.(const handle_error $ (const latex $
           odoc_file_directories $ dst ~create:true () $
           syntax $
+          with_children $
           input))
 
   let info =
