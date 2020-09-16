@@ -134,7 +134,7 @@ let input ppf x = create "input" Fpath.pp ppf x
 
 let const s ppf = Fmt.pf ppf s
 
-let longtable column_desc pp ppf x =
+let longtable ~column_desc pp ppf x =
   env "ocamllongtable"
     ~opts:[const "l"]
     ~args:[ column_desc ]
@@ -156,3 +156,19 @@ let small_table pp ppf tbl =
       matrix ppf tbl in
   Fmt.pf ppf {|{\setlength{\LTpre}{0pt}\setlength{\LTpost}{0pt}%a}|}
     table tbl
+
+
+let keyword pp ppf x = env "ocamlkeyword" ~with_break:true pp ppf x
+let type_var pp ppf x = env "ocamltypevar" ~with_break:true pp ppf x
+let page pp ppf x = env "ocamlpage" ~with_break:true pp ppf x
+let argument pp ppf x = env "ocamlargument" ~with_break:true pp ppf x
+let val_ pp ppf x = env "ocamlval" ~with_break:true pp ppf x
+let type_ pp ppf x = env "ocamltype" ~with_break:true pp ppf x
+let constructor pp ppf x = env "ocamlconstructor" ~with_break:true pp ppf x
+let extension  pp ppf x = env "ocamlextension" ~with_break:true pp ppf x
+let exception_  pp ppf x = env "ocamlexception" ~with_break:true pp ppf x
+let module_ pp ppf x = env "ocamlmodule" ~with_break:true pp ppf x
+let module_type pp ppf x = env "ocamlmoduletype" ~with_break:true pp ppf x
+let class_ pp ppf x = env "ocamlclass" ~with_break:true pp ppf x
+let class_type pp ppf x = env "ocamlclasstype" ~with_break:true pp ppf x
+let method_ pp ppf x = env "ocamlmethod" ~with_break:true pp ppf x
