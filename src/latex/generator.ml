@@ -119,8 +119,8 @@ let filter_map f x =
     [] x
 
 let elt_size (x:elt) = match x with
-  | Txt _ | Internal_ref _ | External_ref _ | Label _ | Style _ | Inlined_code _ | Code_fragment _ | Tag _ | Break _ | Ligaturable _ -> Small
-  | List _ | Section _ | Verbatim _ | Raw _ | Code_block _ | Indented _ | Description _-> Large
+  | Txt _ | Internal_ref _ | External_ref _ | Label _ | Style _ | Inlined_code _ | Code_fragment _ | Break _ | Ligaturable _ -> Small
+  | List _ | Section _ | Verbatim _ | Raw _ | Code_block _ | Indented _ | Tag _ |  Description _-> Large
   | Table _  -> Huge
 
 let table = function
@@ -160,7 +160,6 @@ let rec pp_elt ppf = function
     level_macro level with_label ppf (label,content)
   | Break lvl -> Raw.break ppf lvl
   | Raw s -> Fmt.string ppf s
-  | Tag (x,t) -> Raw.ocamltag x pp ppf t
   | Verbatim s -> Raw.verbatim ppf s
   | Internal_ref r -> hyperref ppf r
   | External_ref (l,x) -> href ppf (l,x)
@@ -176,6 +175,7 @@ let rec pp_elt ppf = function
   | Label x -> Raw.label ppf x
   | Indented x ->  Raw.indent pp ppf x
   | Ligaturable s -> Fmt.string ppf s
+  | Tag(s,t) -> tag s ppf t
 
 and pp ppf = function
   | [] -> ()
@@ -213,7 +213,25 @@ and large_table size ppf tbl =
     | Huge -> Raw.break ppf Line; matrix ppf tbl
     | Large | _ -> Raw.indent matrix ppf tbl
 
-
+and tag s ppf x =
+  let open Raw in
+  (match s with
+  | "keyword" -> keyword
+  | "type-var" -> type_var
+  | "argument" -> argument
+  | "val" -> val_
+  | "type" -> type_
+  | "page" -> page
+  | "constructor" -> constructor
+  | "extension" -> extension
+  | "exception" -> exception_
+  | "module_" -> module_
+  | "module_type" -> module_type
+  | "class" -> class_
+  | "class_type" -> class_type
+  | "method_" -> method_
+  | _ -> Fun.id
+  ) pp ppf x
 
 let raw_markup (t : Raw_markup.t) =
   let target, content = t in
@@ -225,7 +243,7 @@ let source k (t : Source.t) =
   let rec token (x : Source.token) = match x with
     | Elt i -> k i
     | Tag (None, l) -> tokens l
-    | Tag (Some s, l) -> [Tag(s, tokens l)]
+    | Tag(Some s,l) -> [Tag (s, tokens l)]
   and tokens t = list_concat_map t ~f:token in
   tokens t
 
