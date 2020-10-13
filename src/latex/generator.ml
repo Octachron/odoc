@@ -213,25 +213,7 @@ and large_table size ppf tbl =
     | Huge -> Raw.break ppf Line; matrix ppf tbl
     | Large | _ -> Raw.indent matrix ppf tbl
 
-and tag s ppf x =
-  let open Raw in
-  (match s with
-  | "keyword" -> keyword
-  | "type-var" -> type_var
-  | "argument" -> argument
-  | "val" -> val_
-  | "type" -> type_
-  | "page" -> page
-  | "constructor" -> constructor
-  | "extension" -> extension
-  | "exception" -> exception_
-  | "module_" -> module_
-  | "module_type" -> module_type
-  | "class" -> class_
-  | "class_type" -> class_type
-  | "method_" -> method_
-  | _ -> Fun.id
-  ) pp ppf x
+and tag s ppf x = Raw.ocamltag s pp ppf x
 
 let raw_markup (t : Raw_markup.t) =
   let target, content = t in

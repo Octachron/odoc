@@ -27,11 +27,13 @@
 \newenvironment{ocamlkeyword}{\bfseries}{}
 
 \newenvironment{ocamlconstructor}{\bfseries}{}
-\newenvironment{ocamltypevar}{\itshape\ttfamily}{}
+\newenvironment{ocamltype-var}{\itshape\ttfamily}{}
 
 \newcommand{\ocamlhighlight}{\bfseries\uline}
 \newcommand{\ocamlerror}{\bfseries}
 \newcommand{\ocamlwarning}{\bfseries}
+
+\newcommand{\ocamltag}[2]{\begin{ocaml#1}#2\end{ocaml#1}}
 
 \definecolor{lightgray}{gray}{0.97}
 \definecolor{gray}{gray}{0.5}

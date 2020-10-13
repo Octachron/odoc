@@ -70,18 +70,5 @@ val longtable: column_desc:pr -> 'a t
 
 (** {2 Tags } *)
 
-val keyword:'a t
-val type_var: 'a t
-
-val page: 'a t
-val argument: 'a t
-val val_: 'a t
-val type_: 'a t
-val constructor: 'a t
-val extension: 'a t
-val exception_: 'a t
-val module_: 'a t
-val module_type: 'a t
-val class_: 'a t
-val class_type: 'a t
-val method_: 'a t
+val ocamltag: string -> 'a t
+(** tag (e.g keyword, type-var, ...) are rendered to {v \ocamltag{tagname}{content} v} *)

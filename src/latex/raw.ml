@@ -159,17 +159,5 @@ let small_table pp ppf tbl =
   Fmt.pf ppf {|{\setlength{\LTpre}{0pt}\setlength{\LTpost}{0pt}%a}|}
     table tbl
 
-let keyword pp ppf x = env "ocamlkeyword" ~with_break:true pp ppf x
-let type_var pp ppf x = env "ocamltypevar" ~with_break:true pp ppf x
-let page pp ppf x = env "ocamlpage" ~with_break:true pp ppf x
-let argument pp ppf x = env "ocamlargument" ~with_break:true pp ppf x
-let val_ pp ppf x = env "ocamlval" ~with_break:true pp ppf x
-let type_ pp ppf x = env "ocamltype" ~with_break:true pp ppf x
-let constructor pp ppf x = env "ocamlconstructor" ~with_break:true pp ppf x
-let extension  pp ppf x = env "ocamlextension" ~with_break:true pp ppf x
-let exception_  pp ppf x = env "ocamlexception" ~with_break:true pp ppf x
-let module_ pp ppf x = env "ocamlmodule" ~with_break:true pp ppf x
-let module_type pp ppf x = env "ocamlmoduletype" ~with_break:true pp ppf x
-let class_ pp ppf x = env "ocamlclass" ~with_break:true pp ppf x
-let class_type pp ppf x = env "ocamlclasstype" ~with_break:true pp ppf x
-let method_ pp ppf x = env "ocamlmethod" ~with_break:true pp ppf x
+let ocamltag tag pp ppf x =
+  create2 "ocamltag" Fmt.string pp ppf tag x
