@@ -204,7 +204,11 @@ let mark_type ty =
       | Tunivar name -> reserve_name name
       | Tpackage(_, _, tyl) ->
           List.iter (loop visited) tyl
+#if OCAML_MAJOR=4 && OCAML_MINOR < 13
       | Tsubst ty -> loop visited ty
+#else
+      | Tsubst (ty,_) -> loop visited ty
+#endif
       | Tlink _ -> assert false
   in
   loop [] ty
@@ -227,12 +231,20 @@ let mark_type_parameter param =
   mark_type param;
   if aliasable param then use_alias (Btype.proxy param)
 
+#if OCAML_MAJOR=4 && OCAML_MINOR < 13
+let tsubst x = Tsubst x
+let tvar_none ty = ty.desc <- Tvar None
+#else
+let tsubst x = Tsubst(x,None)
+let tvar_none ty = Types.Private_type_expr.set_desc ty (Tvar None)
+#endif
+
 let prepare_type_parameters params manifest =
   let params =
     List.fold_left
       (fun params param ->
         let param = Btype.repr param in
-        if List.memq param params then Btype.newgenty (Tsubst param) :: params
+        if List.memq param params then Btype.newgenty (tsubst param) :: params
         else param :: params)
       [] params
   in
@@ -242,7 +254,7 @@ let prepare_type_parameters params manifest =
         let vars = Ctype.free_variables ty in
           List.iter
             (function {desc = Tvar (Some "_"); _} as ty ->
-              if List.memq ty vars then ty.desc <- Tvar None
+              if List.memq ty vars then tvar_none ty
                     | _ -> ())
             params
     | None -> ()
@@ -391,8 +403,12 @@ let rec read_type_expr env typ =
                    (frag, typ))
               frags tyl
           in
-            Package {path; substitutions}
+          Package {path; substitutions}
+#if OCAML_MAJOR=4 && OCAML_MINOR<13
       | Tsubst typ -> read_type_expr env typ
+#else
+      | Tsubst (typ,_) -> read_type_expr env typ
+#endif
       | Tlink _ -> assert false
     in
       match alias with
