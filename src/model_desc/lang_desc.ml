@@ -176,6 +176,18 @@ and modulesubstitution_t =
       F ("manifest", (fun t -> (t.manifest :> Paths.Path.t)), path);
     ]
 
+
+(** {3 ModuleTypeSubstitution} *)
+
+and moduletypesubstitution_t =
+  let open Lang.ModuleTypeSubstitution in
+  Record
+    [
+      F ("id", (fun t -> t.id), identifier);
+      F ("doc", (fun t -> t.doc), docs);
+      F ("manifest", (fun t -> t.manifest), moduletype_expr);
+    ]
+
 (** {3 Signature} *)
 
 and signature_recursive =
@@ -195,6 +207,7 @@ and signature_item =
         C ("Module", (x1, x2), Pair (signature_recursive, module_t))
     | ModuleType x -> C ("ModuleType", x, moduletype_t)
     | ModuleSubstitution x -> C ("ModuleSubstitution", x, modulesubstitution_t)
+    | ModuleTypeSubstitution x -> C ("ModuleTypeSubstitution", x, moduletypesubstitution_t)
     | Open x -> C ("Open", x, open_t)
     | Type (x1, x2) ->
         C ("Type", (x1, x2), Pair (signature_recursive, typedecl_t))

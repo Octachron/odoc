@@ -339,6 +339,7 @@ and signature_items :
       | Type (r, t) -> Type (r, type_decl env id t)
       | TypeSubstitution t -> TypeSubstitution (type_decl env id t)
       | ModuleType mt -> ModuleType (module_type env mt)
+      | ModuleTypeSubstitution mts -> ModuleTypeSubstitution (module_type_substitution env mts)
       | Value v -> Value (value_ env id v)
       | Comment c -> Comment (comment env id c)
       | TypExt t -> TypExt (extension env id t)
@@ -430,6 +431,20 @@ and module_type : Env.t -> ModuleType.t -> ModuleType.t =
   let doc = comment_docs env sg_id m.doc in
   { m with expr = expr'; doc }
 
+
+and module_type_substitution : Env.t -> ModuleTypeSubstitution.t -> ModuleTypeSubstitution.t =
+ fun env m ->
+  let sg_id = (m.id :> Id.Signature.t) in
+  let open ModuleTypeSubstitution in
+      let manifest' = module_type_expr env sg_id m.manifest
+      in
+      let doc = comment_docs env sg_id m.doc in
+      {
+        m with
+        manifest = manifest';
+        doc;
+      }
+
 and include_ : Env.t -> Include.t -> Include.t =
  fun env i ->
   let open Include in
@@ -485,7 +500,7 @@ and handle_fragments env id sg subs =
           in
           let sg' =
             Tools.fragmap ~mark_substituted:true env
-              Component.Of_Lang.(module_type_substitution empty lsub)
+              Component.Of_Lang.(with_module_type_substitution empty lsub)
               sg
           in
           (sg', ModuleEq (frag', module_decl env id decl) :: subs)
@@ -503,7 +518,7 @@ and handle_fragments env id sg subs =
           in
           let sg' =
             Tools.fragmap ~mark_substituted:true env
-              Component.Of_Lang.(module_type_substitution empty lsub)
+              Component.Of_Lang.(with_module_type_substitution empty lsub)
               sg
           in
           (sg', TypeEq (frag', type_decl_equation env id eqn) :: subs)
@@ -521,7 +536,7 @@ and handle_fragments env id sg subs =
           in
           let sg' =
             Tools.fragmap ~mark_substituted:true env
-              Component.Of_Lang.(module_type_substitution empty lsub)
+              Component.Of_Lang.(with_module_type_substitution empty lsub)
               sg
           in
           (sg', ModuleSubst (frag', module_path env mpath) :: subs)
@@ -539,7 +554,7 @@ and handle_fragments env id sg subs =
           in
           let sg' =
             Tools.fragmap ~mark_substituted:true env
-              Component.Of_Lang.(module_type_substitution empty lsub)
+              Component.Of_Lang.(with_module_type_substitution empty lsub)
               sg
           in
           (sg', TypeSubst (frag', type_decl_equation env id eqn) :: subs)

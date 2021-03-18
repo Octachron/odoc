@@ -341,6 +341,7 @@ module ExtractIDs = struct
       | Module (id, _, _) :: rest -> inner rest (module_ parent map id)
       | ModuleSubstitution (id, _) :: rest -> inner rest (module_ parent map id)
       | ModuleType (id, _mt) :: rest -> inner rest (module_type parent map id)
+      | ModuleTypeSubstitution (id, _mt) :: rest -> inner rest (module_type parent map id)
       | Type (id, _, _t) :: rest -> inner rest (type_decl parent map id)
       | TypeSubstitution (id, _t) :: rest ->
           inner rest (type_decl parent map id)
@@ -378,6 +379,10 @@ let rec signature_items id map items =
         inner rest
           (Odoc_model.Lang.Signature.ModuleType (module_type map parent id m)
            :: acc)
+    | ModuleTypeSubstitution (id, m) :: rest ->
+        inner rest
+          ( Odoc_model.Lang.Signature.ModuleTypeSubstitution (module_type_substitution map parent id m)
+          :: acc )
     | Type (id, r, t) :: rest ->
         let t = Component.Delayed.get t in
         inner rest (Type (r, type_decl map parent id t) :: acc)
@@ -787,6 +792,23 @@ and module_type :
     canonical = Opt.map (Path.module_type map) mty.canonical;
     expr = Opt.map (module_type_expr map sig_id) mty.expr;
   }
+
+and module_type_substitution :
+    maps ->
+    Identifier.Signature.t ->
+    Ident.module_type ->
+    Component.ModuleTypeSubstitution.t ->
+    Odoc_model.Lang.ModuleTypeSubstitution.t =
+ fun map parent id mty ->
+  let identifier = Component.ModuleTypeMap.find id map.module_type in
+  let sig_id = (identifier :> Odoc_model.Paths.Identifier.Signature.t) in
+  let map = { map with shadowed = empty_shadow } in
+  {
+    Odoc_model.Lang.ModuleTypeSubstitution.id = identifier;
+    doc = docs (parent :> Identifier.LabelParent.t) mty.doc;
+    manifest = module_type_expr map sig_id mty.manifest;
+  }
+
 
 and type_decl_constructor_argument :
     maps ->

@@ -115,6 +115,17 @@ and ModuleSubstitution : sig
 end =
   ModuleSubstitution
 
+
+and ModuleTypeSubstitution : sig
+  type t = {
+    id : Identifier.ModuleType.t;
+    doc : Comment.docs;
+    manifest : ModuleType.expr;
+  }
+end =
+  ModuleTypeSubstitution
+
+
 (** {3 Signatures} *)
 
 and Signature : sig
@@ -124,6 +135,7 @@ and Signature : sig
     | Module of recursive * Module.t
     | ModuleType of ModuleType.t
     | ModuleSubstitution of ModuleSubstitution.t
+    | ModuleTypeSubstitution of ModuleTypeSubstitution.t
     | Open of Open.t
     | Type of recursive * TypeDecl.t
     | TypeSubstitution of TypeDecl.t

@@ -46,6 +46,14 @@ let prefix_substitution path sg =
              (`ModuleType (path, name))
              sub')
           rest
+    | ModuleTypeSubstitution (id, _) :: rest ->
+        let name = Ident.Name.typed_module_type id in
+        get_sub
+          (Subst.add_module_type id
+             (`ModuleType (path, name))
+             (`ModuleType (path, name))
+             sub')
+          rest
     | ModuleSubstitution (id, _) :: rest ->
         let name = Ident.Name.typed_module id in
         get_sub
@@ -128,6 +136,9 @@ let prefix_signature (path, sg) =
         | ModuleSubstitution (id, m) ->
             ModuleSubstitution
               (Ident.Rename.module_ id, Subst.module_substitution sub m)
+        | ModuleTypeSubstitution (id, m) ->
+            ModuleTypeSubstitution
+              (Ident.Rename.module_type id, Subst.module_type_substitution sub m)
         | Exception (id, e) -> Exception (id, Subst.exception_ sub e)
         | TypExt t -> TypExt (Subst.extension sub t)
         | Value (id, v) ->

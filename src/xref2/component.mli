@@ -77,6 +77,10 @@ and ModuleSubstitution : sig
   type t = { doc : CComment.docs; manifest : Cpath.module_ }
 end
 
+and ModuleTypeSubstitution : sig
+  type t = { doc : CComment.docs; manifest : ModuleType.expr }
+end
+
 and TypeExpr : sig
   module Polymorphic_variant : sig
     type kind = Odoc_model.Lang.TypeExpr.Polymorphic_variant.kind
@@ -269,6 +273,7 @@ and Signature : sig
     | Module of Ident.module_ * recursive * Module.t Delayed.t
     | ModuleSubstitution of Ident.module_ * ModuleSubstitution.t
     | ModuleType of Ident.module_type * ModuleType.t Delayed.t
+    | ModuleTypeSubstitution of Ident.module_type * ModuleTypeSubstitution.t
     | Type of Ident.type_ * recursive * TypeDecl.t Delayed.t
     | TypeSubstitution of Ident.type_ * TypeDecl.t
     | Exception of Ident.exception_ * Exception.t
@@ -686,7 +691,7 @@ module Of_Lang : sig
 
   val module_ : map -> Odoc_model.Lang.Module.t -> Module.t
 
-  val module_type_substitution :
+  val with_module_type_substitution :
     map -> Odoc_model.Lang.ModuleType.substitution -> ModuleType.substitution
 
   val functor_parameter :

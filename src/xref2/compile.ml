@@ -229,6 +229,7 @@ and signature_items : Env.t -> Id.Signature.t -> Signature.item list -> _ =
             let ty = Component.Of_Lang.(module_type empty m') in
             let env' = Env.add_module_type mt.id ty env in
             (ModuleType (module_type env mt) :: items, env')
+        | ModuleTypeSubstitution mt -> std @@ ModuleTypeSubstitution (module_type_substitution env mt)
         | Value v -> std @@ Value (value_ env id v)
         | Comment c -> std @@ Comment c
         | TypExt t -> std @@ TypExt (extension env id t)
@@ -264,6 +265,10 @@ and signature_items : Env.t -> Id.Signature.t -> Signature.item list -> _ =
       ([], env) s
   in
   List.rev items
+
+and module_type_substitution env mt =
+  let open ModuleTypeSubstitution in
+  { mt with manifest = module_type_expr env (mt.id:>Id.Signature.t) mt.manifest }
 
 and signature : Env.t -> Id.Signature.t -> Signature.t -> _ =
  fun env id s ->

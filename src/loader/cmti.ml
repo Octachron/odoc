@@ -470,6 +470,9 @@ let rec read_with_constraint env parent (_, frag, constr) =
         let frag = Env.Fragment.read_module frag.Location.txt in
         let p = Env.Path.read_module env p in
           ModuleSubst(frag, p)
+#if OCAML_VERSION>=(4,13,0)
+  | Twith_modtype _ | Twith_modtypesubst _ -> failwith "TODO"
+#endif
 
 and read_module_type env parent label_parent mty =
   let open ModuleType in
@@ -681,6 +684,11 @@ and read_signature_item env parent item =
         read_type_substitutions env parent tst
     | Tsig_modsubst mst ->
         [ModuleSubstitution (read_module_substitution env parent mst)]
+#if OCAML_VERSION >= (4,13,0)
+    | Tsig_modtypesubst mtst ->
+        [ModuleTypeSubstitution (read_module_type_substitution env parent mtst)]
+#endif
+
 
 and read_module_substitution env parent ms =
   let open ModuleSubstitution in
@@ -689,6 +697,21 @@ and read_module_substitution env parent ms =
   let doc, () = Doc_attr.attached Odoc_model.Semantics.Expect_none container ms.ms_attributes in
   let manifest = Env.Path.read_module env ms.ms_manifest in
   { id; doc; manifest }
+
+#if OCAML_VERSION >= (4,13,0)
+and read_module_type_substitution env parent mtd =
+  let open ModuleTypeSubstitution in
+  let id = Env.find_module_type env mtd.mtd_id in
+  let container = (parent : Identifier.Signature.t :> Identifier.LabelParent.t) in
+  let doc = Doc_attr.attached container mtd.mtd_attributes in
+  let expr = match opt_map (read_module_type env (id :> Identifier.Signature.t) container) mtd.mtd_type with
+    | None -> assert false
+    | Some x -> x
+  in
+  {id; doc; manifest=expr;}
+#endif
+
+
 #endif
 
 and read_include env parent incl =

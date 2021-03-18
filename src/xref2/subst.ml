@@ -531,6 +531,13 @@ and module_type s t =
   in
   { expr; doc = t.doc; canonical = option_ module_type_path s t.canonical }
 
+and module_type_substitution s t =
+  let open Component.ModuleTypeSubstitution in
+  let manifest = module_type_expr s t.manifest in
+  { manifest; doc = t.doc }
+
+
+
 and functor_parameter s t =
   let open Component.FunctorParameter in
   match t with
@@ -590,7 +597,7 @@ and u_module_type_expr s t =
   | Path p -> Path (module_type_path s p)
   | Signature sg -> Signature (signature s sg)
   | With (subs, e) ->
-      With (List.map (module_type_substitution s) subs, u_module_type_expr s e)
+      With (List.map (with_module_type_substitution s) subs, u_module_type_expr s e)
   | TypeOf { t_desc; t_expansion = Some (Signature e) } -> (
       try
         TypeOf
@@ -626,7 +633,7 @@ and module_type_expr s t =
       With
         {
           w_substitutions =
-            List.map (module_type_substitution s) w_substitutions;
+            List.map (with_module_type_substitution s) w_substitutions;
           w_expansion = option_ simple_expansion s w_expansion;
           w_expr = u_module_type_expr s w_expr;
         }
@@ -643,7 +650,7 @@ and module_type_expr s t =
       TypeOf
         { t_desc = module_type_type_of_desc_noexn s t_desc; t_expansion = None }
 
-and module_type_substitution s sub =
+and with_module_type_substitution s sub =
   let open Component.ModuleType in
   match sub with
   | ModuleEq (f, m) -> ModuleEq (module_fragment s f, module_decl s m)
@@ -844,7 +851,13 @@ and rename_bound_idents s sg =
         (rename_module_type id id' s)
         (ModuleType (id', mt) :: sg)
         rest
-  | Type (id, r, t) :: rest ->
+ | ModuleTypeSubstitution (id, mt) :: rest ->
+      let id' = new_module_type_id id in
+      rename_bound_idents
+        (rename_module_type id id' s)
+        (ModuleTypeSubstitution (id', mt) :: sg)
+        rest
+ | Type (id, r, t) :: rest ->
       let id' = new_type_id id in
       rename_bound_idents
         (rename_type (id :> Ident.path_type) (id' :> Ident.path_type) s)
@@ -941,6 +954,11 @@ and apply_sig_map s items removed =
                Component.Delayed.put (fun () ->
                    module_type s (Component.Delayed.get mt)) )
            :: acc)
+    | ModuleTypeSubstitution (id, mt) :: rest ->
+        inner rest
+          ( ModuleTypeSubstitution
+              ( id, module_type_substitution s mt)
+          :: acc )
     | Type (id, r, t) :: rest ->
         inner rest
           (Type

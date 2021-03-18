@@ -1094,6 +1094,12 @@ module Make (Syntax : SYNTAX) = struct
       | `Module (_, name) when ModuleName.is_internal name -> true
       | _ -> false
 
+  let internal_module_type_substitution t =
+      let open Lang.ModuleTypeSubstitution in
+      match t.id with
+      | `ModuleType (_, name) when ModuleTypeName.is_internal name -> true
+      | _ -> false
+
     let rec signature (s : Lang.Signature.t) =
       let rec loop l acc_items =
         match l with
@@ -1107,6 +1113,9 @@ module Make (Syntax : SYNTAX) = struct
             | ModuleType m when internal_module_type m -> loop rest acc_items
             | ModuleSubstitution m when internal_module_substitution m ->
                 loop rest acc_items
+            | ModuleTypeSubstitution m when internal_module_type_substitution m ->
+                loop rest acc_items
+            | ModuleTypeSubstitution m -> continue @@ module_type_substitution m
             | Module (_, m) -> continue @@ module_ m
             | ModuleType m -> continue @@ module_type m
             | Class (_, c) -> continue @@ class_ c
@@ -1184,6 +1193,21 @@ module Make (Syntax : SYNTAX) = struct
       let attr = [ "module-substitution" ] in
       let anchor = path_to_id t.id in
       let doc = Comment.to_ir t.doc in
+      Item.Declaration { attr; anchor; doc; content }
+
+    and module_type_substitution (t : Odoc_model.Lang.ModuleTypeSubstitution.t) =
+      let modname = Paths.Identifier.name t.id in
+      let modname, expansion_doc, mty = module_type_manifest modname t.id t.doc (Some t.manifest) in
+      let content =
+        O.documentedSrc
+          (O.keyword "module" ++ O.txt " " ++ O.keyword "type" ++ O.txt " ")
+        @ modname @ mty
+        @ O.documentedSrc
+            (if Syntax.Mod.close_tag_semicolon then O.txt ";" else O.noop)
+      in
+      let attr = [ "module-type" ] in
+      let anchor = path_to_id t.id in
+      let doc = Comment.synopsis ~decl_doc:t.doc ~expansion_doc in
       Item.Declaration { attr; anchor; doc; content }
 
     and simple_expansion :
@@ -1327,31 +1351,36 @@ module Make (Syntax : SYNTAX) = struct
       | Alias (mod_path, _) -> Link.from_path (mod_path :> Paths.Path.t)
       | ModuleType mt -> mty mt
 
+    and module_type_manifest modname id doc manifest =
+        let expansion =
+          match manifest with
+          | None -> None
+          | Some e -> expansion_of_module_type_expr e
+        in
+        let modname, expansion, expansion_doc =
+          match expansion with
+          | None -> (O.documentedSrc @@ O.txt modname, None, None)
+          | Some (expansion_doc, items) ->
+              let url = Url.Path.from_identifier id in
+              let link = path url [ inline @@ Text modname ] in
+              let page =
+                make_expansion_page modname `Mty url [ doc; expansion_doc ]
+                  items
+              in
+              (O.documentedSrc link, Some page, Some expansion_doc)
+        in
+        let summary =
+          match manifest with
+          | None -> O.noop
+          | Some expr -> O.txt " = " ++ mty expr
+        in
+        modname,
+        expansion_doc,
+        attach_expansion (" = ", "sig", "end") expansion summary
+
     and module_type (t : Odoc_model.Lang.ModuleType.t) =
       let modname = Paths.Identifier.name t.id in
-      let expansion =
-        match t.expr with
-        | None -> None
-        | Some e -> expansion_of_module_type_expr e
-      in
-      let modname, expansion, expansion_doc =
-        match expansion with
-        | None -> (O.documentedSrc @@ O.txt modname, None, None)
-        | Some (expansion_doc, items) ->
-            let url = Url.Path.from_identifier t.id in
-            let link = path url [ inline @@ Text modname ] in
-            let page =
-              make_expansion_page modname `Mty url [ t.doc; expansion_doc ]
-                items
-            in
-            (O.documentedSrc link, Some page, Some expansion_doc)
-      in
-      let summary =
-        match t.expr with
-        | None -> O.noop
-        | Some expr -> O.txt " = " ++ mty expr
-      in
-      let mty = attach_expansion (" = ", "sig", "end") expansion summary in
+      let modname, expansion_doc, mty = module_type_manifest modname t.id t.doc t.expr in
       let content =
         O.documentedSrc
           (O.keyword "module" ++ O.txt " " ++ O.keyword "type" ++ O.txt " ")
