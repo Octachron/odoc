@@ -69,6 +69,7 @@ and moduletype_substitution =
           ( "ModuleEq",
             ((x1 :> Paths.Fragment.t), x2),
             Pair (fragment, module_decl) )
+    | ModuleTypeEq (x1, x2) -> C ("ModuleTypeEq", (x1, x2), Pair (fragment, moduletype_expr))
     | TypeEq (x1, x2) ->
         C
           ( "TypeEq",
@@ -79,6 +80,8 @@ and moduletype_substitution =
           ( "ModuleSubst",
             ((x1 :> Paths.Fragment.t), (x2 :> Paths.Path.t)),
             Pair (fragment, path) )
+    | ModuleTypeSubst (x1, x2) ->
+      C ("ModuleTypeSubst", (x1, x2), Pair (fragment, moduletype_expr))
     | TypeSubst (x1, x2) ->
         C
           ( "TypeSubst",

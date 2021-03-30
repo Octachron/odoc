@@ -170,6 +170,8 @@ module Make (Syntax : SYNTAX) = struct
         | `ClassType (`Root _, s) -> ClassTypeName.to_string s
         | `Module (rr, s) ->
             dot (render_resolved_fragment (rr :> t)) (ModuleName.to_string s)
+        | `Module_type (rr, s) ->
+            dot (render_resolved_fragment (rr :> t)) (ModuleTypeName.to_string s)
         | `Type (rr, s) ->
             dot (render_resolved_fragment (rr :> t)) (TypeName.to_string s)
         | `Class (rr, s) ->
@@ -1216,6 +1218,7 @@ module Make (Syntax : SYNTAX) = struct
      fun t ->
       let rec extract_functor_params
           (f : Odoc_model.Lang.ModuleType.simple_expansion) =
+
         match f with
         | Signature sg -> (None, sg)
         | Functor (p, expansion) ->
@@ -1520,6 +1523,14 @@ module Make (Syntax : SYNTAX) = struct
           O.keyword "module" ++ O.sp
           ++ Link.from_fragment (frag_mod :> Paths.Fragment.leaf)
           ++ O.sp ++ O.txt "= " ++ mdexpr md
+      | ModuleTypeEq (frag_mty, md) ->
+        O.keyword "module" ++
+          O.txt " " ++
+          O.keyword "type" ++
+          O.txt " " ++
+          Link.from_fragment (frag_mty :> Paths.Fragment.leaf)
+        ++ O.txt " = " ++
+          mty md
       | TypeEq (frag_typ, td) ->
           O.keyword "type" ++ O.sp
           ++ type_expr_in_subst td (frag_typ :> Paths.Fragment.leaf)
@@ -1530,6 +1541,14 @@ module Make (Syntax : SYNTAX) = struct
           ++ Link.from_fragment (frag_mod :> Paths.Fragment.leaf)
           ++ O.sp ++ O.txt ":= "
           ++ Link.from_path (mod_path :> Paths.Path.t)
+      | ModuleTypeSubst (frag_mty, md) ->
+        O.keyword "module" ++
+          O.txt " " ++
+          O.keyword "type" ++
+          O.txt " " ++
+          Link.from_fragment (frag_mty :> Paths.Fragment.leaf)
+        ++ O.txt " := " ++
+          mty md
       | TypeSubst (frag_typ, td) -> (
           O.keyword "type" ++ O.sp
           ++ type_expr_in_subst td (frag_typ :> Paths.Fragment.leaf)

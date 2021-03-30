@@ -244,6 +244,12 @@ val resolve_module_fragment :
   Cfrag.module_ ->
   Cfrag.resolved_module option
 
+val resolve_module_type_fragment :
+  Env.t ->
+  Cfrag.root * Component.Signature.t ->
+  Cfrag.module_type ->
+  Cfrag.resolved_module_type option
+
 val resolve_type_fragment :
   Env.t ->
   Cfrag.root * Component.Signature.t ->

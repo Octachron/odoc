@@ -735,6 +735,18 @@ module Fragment = struct
         | `OpaqueModule m -> split m
     end
 
+    module ModuleType = struct
+      type t = Paths_types.Resolved_fragment.module_type
+
+      let split : t -> string * t option = function
+        | `Module_type (m, name) -> begin
+            match split_parent m with
+            | Base _ -> (ModuleTypeName.to_string name, None)
+            | Branch(base,m) -> ModuleName.to_string base, Some (`Module_type(m,name))
+          end
+
+    end
+
     module Type = struct
       type t = Paths_types.Resolved_fragment.type_
 
@@ -765,6 +777,7 @@ module Fragment = struct
       | `SubstAlias (p, _) ->
           (Path.Resolved.Module.identifier p :> Identifier.t)
       | `Module (m, n) -> `Module (Signature.identifier m, n)
+      | `Module_type(m, n) -> `ModuleType (Signature.identifier m, n)
       | `Type (m, n) -> `Type (Signature.identifier m, n)
       | `Class (m, n) -> `Class (Signature.identifier m, n)
       | `ClassType (m, n) -> `ClassType (Signature.identifier m, n)
@@ -828,6 +841,28 @@ module Fragment = struct
           | Branch (base, m) ->
               (ModuleName.to_string base, Some (`Dot (m, name))))
   end
+
+
+
+  module ModuleType = struct
+    type t = Paths_types.Fragment.module_type
+
+    let split : t -> string * t option = function
+      | `Resolved r ->
+        let base, m = Resolved.ModuleType.split r in
+        let m =
+          match m with
+          | None -> None
+          | Some m -> Some (`Resolved m)
+        in
+        base, m
+      | `Dot(m, name) ->
+        match split_parent m with
+        | Base _ -> name, None
+        | Branch(base, m) -> ModuleName.to_string base, Some(`Dot(m, name))
+
+  end
+
 
   module Type = struct
     type t = Paths_types.Fragment.type_

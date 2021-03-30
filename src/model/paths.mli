@@ -502,6 +502,12 @@ module Fragment : sig
       val split : t -> string * t option
     end
 
+    module ModuleType : sig
+      type t = Paths_types.Resolved_fragment.module_type
+
+      val split : t -> string * t option
+    end
+
     module Type : sig
       type t = Paths_types.Resolved_fragment.type_
 
@@ -530,6 +536,11 @@ module Fragment : sig
 
     val split : t -> string * t option
   end
+
+    module ModuleType : sig
+      type t = Paths_types.Fragment.module_type
+      val split : t -> string * t option
+    end
 
   module Type : sig
     type t = Paths_types.Fragment.type_

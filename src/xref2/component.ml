@@ -184,6 +184,8 @@ and ModuleType : sig
   type substitution =
     | ModuleEq of Cfrag.module_ * Module.decl
     | ModuleSubst of Cfrag.module_ * Cpath.module_
+    | ModuleTypeEq of Cfrag.module_type * ModuleType.expr
+    | ModuleTypeSubst of Cfrag.module_type * ModuleType.expr
     | TypeEq of Cfrag.type_ * TypeDecl.Equation.t
     | TypeSubst of Cfrag.type_ * TypeDecl.Equation.t
 
@@ -313,6 +315,7 @@ and Signature : sig
     | RModule of Ident.module_ * Cpath.Resolved.module_
     | RType of Ident.type_ * TypeExpr.t * TypeDecl.Equation.t
         (** [RType (_, texpr, eq)], [eq.manifest = Some texpr] *)
+    | RModuleType of Ident.module_type * Cpath.Resolved.module_type
 
   type t = {
     items : item list;
@@ -624,6 +627,9 @@ module Fmt = struct
     | RType (id, texpr, eq) ->
         Format.fprintf ppf "type %a %a = (%a)" type_params eq.params Ident.fmt
           id type_expr texpr
+    | RModuleType (id, path) ->
+        Format.fprintf ppf "module %a (%a)" Ident.fmt id resolved_module_type_path
+          path
 
   and removed_item_list ppf r =
     match r with
@@ -788,6 +794,10 @@ module Fmt = struct
         Format.fprintf ppf "%a = %a" module_fragment frag module_decl decl
     | ModuleSubst (frag, mpath) ->
         Format.fprintf ppf "%a := %a" module_fragment frag module_path mpath
+    | ModuleTypeEq (frag, mty) ->
+        Format.fprintf ppf "%a = %a" module_type_fragment frag module_type_expr mty
+    | ModuleTypeSubst (frag, mty) ->
+        Format.fprintf ppf "%a := %a" module_type_fragment frag module_type_expr mty
     | TypeEq (frag, decl) ->
         Format.fprintf ppf "%a%a" type_fragment frag type_equation decl
     | TypeSubst (frag, decl) ->
@@ -1211,6 +1221,10 @@ module Fmt = struct
         Format.fprintf ppf "%a.%s" model_resolved_fragment
           (sg :> t)
           (Odoc_model.Names.ModuleName.to_string m)
+    | `Module_type (sg, mty) ->
+        Format.fprintf ppf "%a.%s" model_resolved_fragment
+          (sg :> t)
+          (Odoc_model.Names.ModuleTypeName.to_string mty)
     | `Type (sg, t) ->
         Format.fprintf ppf "%a.%s" model_resolved_fragment
           (sg :> t)
@@ -1260,6 +1274,12 @@ module Fmt = struct
     | `OpaqueModule m ->
         Format.fprintf ppf "opaquemodule(%a)" resolved_module_fragment m
 
+  and resolved_module_type_fragment ppf (f : Cfrag.resolved_module_type) =
+    match f with
+    | `ModuleType (p, n) ->
+        Format.fprintf ppf "%a.%s" resolved_signature_fragment p
+          (ModuleTypeName.to_string n)
+
   and resolved_type_fragment ppf (f : Cfrag.resolved_type) =
     match f with
     | `Type (s, n) ->
@@ -1282,6 +1302,13 @@ module Fmt = struct
     match f with
     | `Resolved r -> Format.fprintf ppf "r(%a)" resolved_module_fragment r
     | `Dot (s, n) -> Format.fprintf ppf "%a.%s" signature_fragment s n
+
+  and module_type_fragment ppf (f : Cfrag.module_type) =
+    match f with
+    | `Resolved r ->
+        Format.fprintf ppf "resolved(%a)" resolved_module_type_fragment r
+    | `Dot (s, n) -> Format.fprintf ppf "%a.%s" signature_fragment s n
+
 
   and type_fragment ppf (f : Cfrag.type_) =
     match f with
@@ -1773,6 +1800,14 @@ module Of_Lang = struct
     | `Module (p, m) -> `Module (resolved_signature_fragment ident_map p, m)
     | `OpaqueModule m -> `OpaqueModule (resolved_module_fragment ident_map m)
 
+  and resolved_module_type_fragment :
+      _ -> Odoc_model.Paths.Fragment.Resolved.ModuleType.t -> Cfrag.resolved_module_type
+      =
+   fun ident_map ty ->
+    match ty with
+    | `Module_type (p, m) -> `ModuleType (resolved_signature_fragment ident_map p, m)
+
+
   and resolved_type_fragment :
       _ -> Odoc_model.Paths.Fragment.Resolved.Type.t -> Cfrag.resolved_type =
    fun ident_map ty ->
@@ -1795,6 +1830,13 @@ module Of_Lang = struct
    fun ident_map ty ->
     match ty with
     | `Resolved r -> `Resolved (resolved_module_fragment ident_map r)
+    | `Dot (p, n) -> `Dot (signature_fragment ident_map p, n)
+
+  let module_type_fragment : _ -> Odoc_model.Paths.Fragment.ModuleType.t -> Cfrag.module_type
+      =
+   fun ident_map ty ->
+    match ty with
+    | `Resolved r -> `Resolved (resolved_module_type_fragment ident_map r)
     | `Dot (p, n) -> `Dot (signature_fragment ident_map p, n)
 
   let type_fragment : _ -> Odoc_model.Paths.Fragment.Type.t -> Cfrag.type_ =
@@ -1986,6 +2028,12 @@ module Of_Lang = struct
     | ModuleSubst (frag, p) ->
         ModuleType.ModuleSubst
           (module_fragment ident_map frag, module_path ident_map p)
+    | ModuleTypeEq (frag, mty) ->
+        ModuleType.ModuleTypeEq
+          (module_type_fragment ident_map frag, module_type_expr ident_map mty)
+    | ModuleTypeSubst (frag, mty) ->
+        ModuleType.ModuleTypeSubst
+          (module_type_fragment ident_map frag, module_type_expr ident_map mty)
     | TypeEq (frag, eqn) ->
         ModuleType.TypeEq
           (type_fragment ident_map frag, type_equation ident_map eqn)

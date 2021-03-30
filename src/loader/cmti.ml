@@ -451,7 +451,8 @@ let read_class_descriptions env parent clds =
   |> fst
   |> List.rev
 
-let rec read_with_constraint env parent (_, frag, constr) =
+let rec read_with_constraint env global_parent parent (_, frag, constr) =
+  let _ = global_parent in
   let open ModuleType in
     match constr with
     | Twith_type decl ->
@@ -470,8 +471,15 @@ let rec read_with_constraint env parent (_, frag, constr) =
         let frag = Env.Fragment.read_module frag.Location.txt in
         let p = Env.Path.read_module env p in
           ModuleSubst(frag, p)
-#if OCAML_VERSION>=(4,13,0)
-  | Twith_modtype _ | Twith_modtypesubst _ -> failwith "TODO"
+#if OCAML_VERSION >= (4,13,0)
+   | Twith_modtype mty ->
+        let frag = Env.Fragment.read_module_type frag.Location.txt in
+        let mty = read_module_type env global_parent parent mty in
+        ModuleTypeEq(frag, mty)
+   | Twith_modtypesubst mty ->
+        let frag = Env.Fragment.read_module_type frag.Location.txt in
+        let mty = read_module_type env global_parent parent mty in
+        ModuleTypeSubst(frag, mty)
 #endif
 
 and read_module_type env parent label_parent mty =
@@ -516,7 +524,7 @@ and read_module_type env parent label_parent mty =
 #endif
     | Tmty_with(body, subs) -> (
       let body = read_module_type env parent label_parent body in
-      let subs = List.map (read_with_constraint env label_parent) subs in
+      let subs = List.map (read_with_constraint env parent label_parent) subs in
       match Odoc_model.Lang.umty_of_mty body with
       | Some w_expr ->
           With {w_substitutions=subs; w_expansion=None; w_expr }

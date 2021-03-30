@@ -52,8 +52,10 @@ end =
 and ModuleType : sig
   type substitution =
     | ModuleEq of Fragment.Module.t * Module.Equation.t
+    | ModuleTypeEq of Fragment.ModuleType.t * ModuleType.expr
     | TypeEq of Fragment.Type.t * TypeDecl.Equation.t
     | ModuleSubst of Fragment.Module.t * Path.Module.t
+    | ModuleTypeSubst of Fragment.ModuleType.t * ModuleType.expr
     | TypeSubst of Fragment.Type.t * TypeDecl.Equation.t
 
   type type_of_desc =
