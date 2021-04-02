@@ -154,3 +154,7 @@ and unresolve_type : resolved_type -> type_ = function
       `Dot (unresolve_signature parent, ClassTypeName.to_string name)
   | `Class (parent, name) ->
       `Dot (unresolve_signature parent, ClassName.to_string name)
+
+and unresolve_module_type : resolved_module_type -> module_type = function
+  | `ModuleType (parent, name) ->
+      `Dot (unresolve_signature parent, ModuleTypeName.to_string name)

@@ -788,7 +788,7 @@ module Fragment = struct
       | `Root (`Module r) -> Path.is_resolved_hidden (r :> Path.Resolved.t)
       | `Subst (s, _) -> Path.is_resolved_hidden (s :> Path.Resolved.t)
       | `SubstAlias (s, _) -> Path.is_resolved_hidden (s :> Path.Resolved.t)
-      | `Module (m, _) | `Type (m, _) | `Class (m, _) | `ClassType (m, _) ->
+      | `Module (m, _) | `Module_type (m,_) | `Type (m, _) | `Class (m, _) | `ClassType (m, _) ->
           is_hidden (m :> t)
       | `OpaqueModule m -> is_hidden (m :> t)
   end

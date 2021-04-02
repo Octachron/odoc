@@ -590,6 +590,8 @@ module Fmt : sig
 
   val module_fragment : Format.formatter -> Cfrag.module_ -> unit
 
+  val module_type_fragment : Format.formatter -> Cfrag.module_type -> unit
+
   val type_fragment : Format.formatter -> Cfrag.type_ -> unit
 
   val model_resolved_reference :
@@ -642,7 +644,7 @@ module Of_Lang : sig
 
   val resolved_module_type_fragment :
     map ->
-    Odoc_model.Paths_types.Resolved_fragment.module_type ->
+    Odoc_model.Paths.Fragment.Resolved.ModuleType.t ->
     Cfrag.resolved_module_type
 
   val resolved_type_fragment :
@@ -657,7 +659,7 @@ module Of_Lang : sig
  val type_fragment : map -> Odoc_model.Paths.Fragment.Type.t -> Cfrag.type_
 
   val module_type_fragment :
-    map -> Odoc_model.Paths_types.Fragment.module_type -> Cfrag.module_type
+    map -> Odoc_model.Paths.Fragment.ModuleType.t -> Cfrag.module_type
 
   val type_decl : map -> Odoc_model.Lang.TypeDecl.t -> TypeDecl.t
 

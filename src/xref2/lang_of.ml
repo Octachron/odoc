@@ -242,6 +242,23 @@ module Path = struct
     | `Type (p, n) -> `Type (resolved_signature_fragment map p, n)
     | `ClassType (p, n) -> `ClassType (resolved_signature_fragment map p, n)
     | `Class (p, n) -> `Class (resolved_signature_fragment map p, n)
+
+let rec module_type_fragment :
+      maps -> Cfrag.module_type -> Odoc_model.Paths.Fragment.ModuleType.t =
+   fun map f ->
+    match f with
+    | `Resolved r -> `Resolved (resolved_module_type_fragment map r)
+    | `Dot (sg, p) -> `Dot (signature_fragment map sg, p)
+
+and  resolved_module_type_fragment :
+  maps ->
+  Cfrag.resolved_module_type ->
+  Odoc_model.Paths.Fragment.Resolved.ModuleType.t =
+  fun map f ->
+  match f with
+  | `ModuleType (p, n) -> `Module_type (resolved_signature_fragment map p, n)
+
+
 end
 
 module ExtractIDs = struct
@@ -702,6 +719,15 @@ and mty_substitution map identifier = function
       TypeSubst
         ( Path.type_fragment map frag,
           type_decl_equation map (identifier :> Identifier.Parent.t) eqn )
+  | ModuleTypeEq (frag, eqn) ->
+      ModuleTypeEq
+        ( Path.module_type_fragment map frag,
+          module_type_expr map identifier eqn )
+  | ModuleTypeSubst (frag, eqn) ->
+      ModuleTypeSubst
+        ( Path.module_type_fragment map frag,
+          module_type_expr map identifier eqn )
+
 
 and u_module_type_expr map identifier = function
   | Component.ModuleType.U.Path p_path ->

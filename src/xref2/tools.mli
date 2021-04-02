@@ -262,6 +262,9 @@ val reresolve_module_fragment :
 val reresolve_type_fragment :
   Env.t -> Cfrag.resolved_type -> Cfrag.resolved_type
 
+val reresolve_module_type_fragment :
+  Env.t -> Cfrag.resolved_module_type -> Cfrag.resolved_module_type
+
 (** {2 Fragmap functions} *)
 
 (** The following functions take a signature and apply a transformation to

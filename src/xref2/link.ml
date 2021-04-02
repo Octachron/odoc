@@ -522,6 +522,24 @@ and handle_fragments env id sg subs =
               sg
           in
           (sg', TypeEq (frag', type_decl_equation env id eqn) :: subs)
+      | Ok sg, ModuleTypeEq (frag, eqn) ->
+          let frag' =
+            match frag with
+            | `Resolved f ->
+                let cfrag =
+                  Component.Of_Lang.(resolved_module_type_fragment empty f)
+                in
+                `Resolved
+                  ( Tools.reresolve_module_type_fragment env cfrag
+                  |> Lang_of.(Path.resolved_module_type_fragment empty) )
+            | _ -> frag
+          in
+          let sg' =
+            Tools.fragmap ~mark_substituted:true env
+              Component.Of_Lang.(with_module_type_substitution empty lsub)
+              sg
+          in
+          (sg', ModuleTypeEq (frag', module_type_expr env id eqn) :: subs)
       | Ok sg, ModuleSubst (frag, mpath) ->
           let frag' =
             match frag with
@@ -558,6 +576,24 @@ and handle_fragments env id sg subs =
               sg
           in
           (sg', TypeSubst (frag', type_decl_equation env id eqn) :: subs)
+      | Ok sg, ModuleTypeSubst (frag, eqn) ->
+          let frag' =
+            match frag with
+            | `Resolved f ->
+                let cfrag =
+                  Component.Of_Lang.(resolved_module_type_fragment empty f)
+                in
+                `Resolved
+                  ( Tools.reresolve_module_type_fragment env cfrag
+                  |> Lang_of.(Path.resolved_module_type_fragment empty) )
+            | _ -> frag
+          in
+          let sg' =
+            Tools.fragmap ~mark_substituted:true env
+              Component.Of_Lang.(with_module_type_substitution empty lsub)
+              sg
+          in
+          (sg', ModuleTypeSubst (frag', module_type_expr env id eqn) :: subs)
       | (Error _ as e), lsub -> (e, lsub :: subs))
     (Ok sg, []) subs
   |> snd |> List.rev

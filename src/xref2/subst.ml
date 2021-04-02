@@ -383,6 +383,11 @@ and resolved_module_fragment :
   | `Module (sg, n) -> `Module (resolved_signature_fragment t sg, n)
   | `OpaqueModule m -> `OpaqueModule (resolved_module_fragment t m)
 
+and resolved_module_type_fragment : t -> Cfrag.resolved_module_type -> Cfrag.resolved_module_type =
+ fun t r ->
+  match r with
+  | `ModuleType (s, n) -> `ModuleType (resolved_signature_fragment t s, n)
+
 and resolved_type_fragment : t -> Cfrag.resolved_type -> Cfrag.resolved_type =
  fun t r ->
   match r with
@@ -405,6 +410,16 @@ let rec module_fragment : t -> Cfrag.module_ -> Cfrag.module_ =
       with Invalidated ->
         let frag' = Cfrag.unresolve_module r in
         module_fragment t frag')
+  | `Dot (sg, n) -> `Dot (signature_fragment t sg, n)
+
+let rec module_type_fragment : t -> Cfrag.module_type -> Cfrag.module_type =
+ fun t r ->
+  match r with
+  | `Resolved r -> (
+      try `Resolved (resolved_module_type_fragment t r)
+      with Invalidated ->
+        let frag' = Cfrag.unresolve_module_type r in
+        module_type_fragment t frag' )
   | `Dot (sg, n) -> `Dot (signature_fragment t sg, n)
 
 let rec type_fragment : t -> Cfrag.type_ -> Cfrag.type_ =
@@ -657,6 +672,9 @@ and with_module_type_substitution s sub =
   | ModuleSubst (f, p) -> ModuleSubst (module_fragment s f, module_path s p)
   | TypeEq (f, eq) -> TypeEq (type_fragment s f, type_decl_equation s eq)
   | TypeSubst (f, eq) -> TypeSubst (type_fragment s f, type_decl_equation s eq)
+  | ModuleTypeEq (f, eq) -> ModuleTypeEq (module_type_fragment s f, module_type_expr s eq)
+  | ModuleTypeSubst (f, eq) -> ModuleTypeSubst (module_type_fragment s f, module_type_expr s eq)
+
 
 and module_decl s t =
   match t with
