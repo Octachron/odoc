@@ -35,7 +35,6 @@ depends: [
   "logs"
   "re" {>= "1.7.2"}
 
-  "ocaml-migrate-parsetree" {>= "1.0.6"}
 
   "ocaml-version" {with-test & >= "2.3.0"}
   "lwt" {with-test}
