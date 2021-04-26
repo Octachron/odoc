@@ -207,7 +207,7 @@ let mark_type ty =
           List.iter (fun (_,x) -> loop visited x) tyl
 #else
       | Tpackage(_, _, tyl) ->
-          List.iter (loop visited x) tyl
+          List.iter (loop visited) tyl
 #endif
 #if OCAML_MAJOR=4 && OCAML_MINOR < 13
       | Tsubst ty -> loop visited ty
