@@ -202,8 +202,13 @@ let mark_type ty =
           List.iter (fun t -> add_alias t) tyl;
           loop visited ty
       | Tunivar name -> reserve_name name
+#if OCAML_VERSION>=(4,13,0)
+      | Tpackage(_,tyl) ->
+          List.iter (fun (_,x) -> loop visited x) tyl
+#else
       | Tpackage(_, _, tyl) ->
-          List.iter (loop visited) tyl
+          List.iter (loop visited x) tyl
+#endif
 #if OCAML_MAJOR=4 && OCAML_MINOR < 13
       | Tsubst ty -> loop visited ty
 #else
@@ -392,17 +397,23 @@ let rec read_type_expr env typ =
             remove_names tyl;
             Poly(vars, typ)
       | Tunivar _ -> Var (name_of_type typ)
+#if OCAML_VERSION>=(4,13,0)
+      | Tpackage(p,eqs) ->
+#else
       | Tpackage(p, frags, tyl) ->
+        let eqs = List.combine frags tyl in
+#endif
           let open TypeExpr.Package in
           let path = Env.Path.read_module_type env p in
           let substitutions =
-            List.map2
-              (fun frag typ ->
+            List.map
+              (fun (frag,typ) ->
                  let frag = Env.Fragment.read_type frag in
                  let typ = read_type_expr env typ in
                    (frag, typ))
-              frags tyl
+              eqs
           in
+
           Package {path; substitutions}
 #if OCAML_MAJOR=4 && OCAML_MINOR<13
       | Tsubst typ -> read_type_expr env typ
