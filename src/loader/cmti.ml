@@ -711,7 +711,7 @@ and read_module_type_substitution env parent mtd =
   let open ModuleTypeSubstitution in
   let id = Env.find_module_type env mtd.mtd_id in
   let container = (parent : Identifier.Signature.t :> Identifier.LabelParent.t) in
-  let doc = Doc_attr.attached container mtd.mtd_attributes in
+  let doc, () = Doc_attr.attached Odoc_model.Semantics.Expect_none container mtd.mtd_attributes in
   let expr = match opt_map (read_module_type env (id :> Identifier.Signature.t) container) mtd.mtd_type with
     | None -> assert false
     | Some x -> x
