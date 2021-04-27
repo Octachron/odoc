@@ -53,7 +53,8 @@ let handle_internal_tags (type a) tags : a handle_internal_tags -> a = function
       | Some (`Root _, location) ->
           warn_root_canonical location;
           None
-      | Some ((`Dot _ as p), _) -> Some p
+      | Some (`Dot _ as p, _) ->
+         (Some p: [ `Dot of Paths.Path.Module.t * string ] option)
       | None -> None)
   | Expect_none ->
       (* Will raise warnings. *)
