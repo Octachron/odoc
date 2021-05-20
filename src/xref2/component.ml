@@ -315,7 +315,7 @@ and Signature : sig
     | RModule of Ident.module_ * Cpath.Resolved.module_
     | RType of Ident.type_ * TypeExpr.t * TypeDecl.Equation.t
         (** [RType (_, texpr, eq)], [eq.manifest = Some texpr] *)
-    | RModuleType of Ident.module_type * Cpath.Resolved.module_type
+    | RModuleType of Ident.module_type * ModuleType.expr
 
   type t = {
     items : item list;
@@ -437,6 +437,7 @@ and Substitution : sig
     type_ : subst_type PathTypeMap.t;
     class_type : subst_class_type PathClassTypeMap.t;
     type_replacement : (TypeExpr.t * TypeDecl.Equation.t) PathTypeMap.t;
+    module_type_replacement : ModuleType.expr ModuleTypeMap.t;
     path_invalidating_modules : Ident.path_module list;
     module_type_of_invalidating_modules : Ident.path_module list;
     unresolve_opaque_paths : bool;
@@ -627,9 +628,9 @@ module Fmt = struct
     | RType (id, texpr, eq) ->
         Format.fprintf ppf "type %a %a = (%a)" type_params eq.params Ident.fmt
           id type_expr texpr
-    | RModuleType (id, path) ->
-        Format.fprintf ppf "module %a (%a)" Ident.fmt id resolved_module_type_path
-          path
+    | RModuleType (id, mty) ->
+        Format.fprintf ppf "module type %a = %a" Ident.fmt id module_type_expr
+          mty
 
   and removed_item_list ppf r =
     match r with
@@ -931,14 +932,16 @@ module Fmt = struct
     | `ModuleType (p, m) ->
         Format.fprintf ppf "%a.%s" resolved_parent_path p
           (ModuleTypeName.to_string m)
-    | `SubstT (m1, m2) ->
-        Format.fprintf ppf "substt(%a,%a)" resolved_module_type_path m1
-          resolved_module_type_path m2
     | `CanonicalModuleType (m1, m2) ->
         Format.fprintf ppf "canonicalt(%a,%a)" resolved_module_type_path m1
           module_type_path m2
     | `OpaqueModuleType m ->
         Format.fprintf ppf "opaquemoduletype(%a)" resolved_module_type_path m
+    | `SubstT(mt1,mt2) ->
+        Format.fprintf ppf "subst(%a,%a)"
+          resolved_module_type_path mt1
+          resolved_module_type_path mt2
+
 
   and module_type_path : Format.formatter -> Cpath.module_type -> unit =
    fun ppf m ->
@@ -1687,15 +1690,14 @@ module Of_Lang = struct
     | `Identifier i -> identifier Maps.ModuleType.find ident_map.module_types i
     | `ModuleType (p, name) ->
         `ModuleType (`Module (resolved_module_path ident_map p), name)
-    | `SubstT (p1, p2) ->
-        `SubstT
-          ( resolved_module_type_path ident_map p1,
-            resolved_module_type_path ident_map p2 )
     | `CanonicalModuleType (p1, p2) ->
         `CanonicalModuleType
           (resolved_module_type_path ident_map p1, module_type_path ident_map p2)
     | `OpaqueModuleType m ->
         `OpaqueModuleType (resolved_module_type_path ident_map m)
+    | `SubstT (p1, p2) ->
+        `SubstT (resolved_module_type_path ident_map p1, resolved_module_type_path ident_map p2)
+
 
   and resolved_type_path :
       _ -> Odoc_model.Paths.Path.Resolved.Type.t -> Cpath.Resolved.type_ =

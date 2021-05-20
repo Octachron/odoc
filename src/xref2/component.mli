@@ -293,7 +293,7 @@ and Signature : sig
   type removed_item =
     | RModule of Ident.module_ * Cpath.Resolved.module_
     | RType of Ident.type_ * TypeExpr.t * TypeDecl.Equation.t
-    | RModuleType of Ident.module_type * Cpath.Resolved.module_type
+    | RModuleType of Ident.module_type * ModuleType.expr
 
   type t = {
     items : item list;
@@ -406,6 +406,7 @@ and Substitution : sig
     type_ : subst_type PathTypeMap.t;
     class_type : subst_class_type PathClassTypeMap.t;
     type_replacement : (TypeExpr.t * TypeDecl.Equation.t) PathTypeMap.t;
+    module_type_replacement : ModuleType.expr ModuleTypeMap.t;
     path_invalidating_modules : Ident.path_module list;
     module_type_of_invalidating_modules : Ident.path_module list;
     unresolve_opaque_paths : bool;

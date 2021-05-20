@@ -1457,7 +1457,15 @@ and fragmap :
         | name, None ->
             let mapfn t = Ok (Left { t with Component.ModuleType.expr= Some mtye }) in
             map_signature { id_map with module_type = (Some (name, mapfn)) } sg.items )
-    | ModuleTypeSubst _ -> failwith "TODO"
+    | ModuleTypeSubst (frag,mtye) ->(
+        match Cfrag.module_type_split frag with
+        | name, Some frag' ->
+            let new_subst = Component.ModuleType.ModuleTypeEq (frag', mtye) in
+            handle_intermediate name new_subst
+        | name, None ->
+            let mapfn _t = Ok (Right mtye) in
+            map_signature { id_map with module_type = (Some (name, mapfn)) } sg.items
+      )
     | TypeEq (frag, equation) -> (
         match Cfrag.type_split frag with
         | name, Some frag' ->
@@ -1488,7 +1496,7 @@ and fragmap :
     | Component.Signature.RType (id, r_texpr, r_eq) ->
         Subst.add_type_replacement (id :> Ident.path_type) r_texpr r_eq sub
     | Component.Signature.RModuleType (id, e) ->
-      Subst.add_module_type (id :> Ident.module_type) (`Resolved e) e sub
+      Subst.add_module_type_replacement (id :> Ident.module_type) e sub
   in
 
   let sub = List.fold_right sub_of_removed removed Subst.identity in
@@ -1638,14 +1646,11 @@ and find_module_type_with_replacement :
     ( Component.ModuleType.t Component.Delayed.t,
       simple_module_type_lookup_error )
     Result.result =
- fun env sg name ->
+ fun _env sg name ->
   match Find.careful_module_type_in_sig sg name with
   | Some (`FModuleType (_, m)) -> Ok (Component.Delayed.put_val m)
   | None -> Error `Find_failure
-  | Some (`FModuleType_removed path) ->
-      match lookup_module_type ~mark_substituted:false env path with
-      | Ok x -> Ok (Component.Delayed.put_val x)
-      | Error _ as x -> x
+  | Some (`FModuleType_removed _mty) -> Error `Find_failure
 
 
 and resolve_signature_fragment :
