@@ -28,6 +28,9 @@ val add_class_type :
 val add_type_replacement :
   Ident.path_type -> TypeExpr.t -> TypeDecl.Equation.t -> t -> t
 
+val add_module_type_replacement :
+  Ident.module_type -> ModuleType.expr -> t -> t
+
 val add_module_substitution : Ident.path_module -> t -> t
 
 val type_ : t -> Component.TypeDecl.t -> Component.TypeDecl.t
