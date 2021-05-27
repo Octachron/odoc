@@ -278,7 +278,11 @@ let mark_constructor_args =
 
 let mark_type_kind = function
   | Type_abstract -> ()
+#if OCAML_VERSION >= (4,13,0)
+  | Type_variant (cds,_) ->
+#else
   | Type_variant cds ->
+#endif
       List.iter
         (fun cd ->
            mark_constructor_args cd.cd_args;
@@ -591,7 +595,11 @@ let read_constructor_declaration env parent cd =
 let read_type_kind env parent =
   let open TypeDecl.Representation in function
     | Type_abstract -> None
-    | Type_variant cstrs ->
+#if OCAML_VERSION >= (4,13,0)
+  | Type_variant (cstrs,_) ->
+#else
+  | Type_variant cstrs ->
+#endif
         let cstrs =
           List.map (read_constructor_declaration env parent) cstrs
         in
@@ -655,7 +663,11 @@ let read_type_declaration env parent id decl =
         decl.type_manifest = None || decl.type_private = Private
     | Type_record _ ->
         decl.type_private = Private
-    | Type_variant tll ->
+#if OCAML_VERSION >= (4,13,0)
+  | Type_variant (tll,_) ->
+#else
+  | Type_variant tll ->
+#endif
         decl.type_private = Private ||
         List.exists (fun cd -> cd.cd_res <> None) tll
     | Type_open ->
