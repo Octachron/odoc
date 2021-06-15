@@ -81,7 +81,11 @@ module Path = struct
     | `Identifier ((#Odoc_model.Paths.Identifier.ModuleType.t as y), b) ->
         `Identifier (y, b)
     | `Local (id, b) ->
-        `Identifier (Component.ModuleTypeMap.find id map.module_type, b)
+        `Identifier
+          ( (try Component.ModuleTypeMap.find id map.module_type
+            with Not_found ->
+              failwith (Format.asprintf "Not_found: %a" Ident.fmt id)),
+            b )
     | `Resolved x -> `Resolved (resolved_module_type map x)
     | `Dot (p, n) -> `Dot (module_ map p, n)
     | `ModuleType (`Module p, n) ->
@@ -156,7 +160,12 @@ module Path = struct
     match p with
     | `Identifier (#Odoc_model.Paths.Identifier.ModuleType.t as y) ->
         `Identifier y
-    | `Local id -> `Identifier (Component.ModuleTypeMap.find id map.module_type)
+    | `Local id ->
+        `Identifier
+          ( (try Component.ModuleTypeMap.find id map.module_type
+            with Not_found ->
+              failwith (Format.asprintf "Not_found: %a" Ident.fmt id))
+          )
     | `ModuleType (p, name) -> `ModuleType (resolved_parent map p, name)
     | `Substituted s -> resolved_module_type map s
     | `SubstT (p1, p2) ->

@@ -185,10 +185,6 @@ and substitute_vars_poly_variant vars v =
   in
   { v with elements = List.map subst_element v.elements }
 
-let final_module_type = function
-  | Replaced _ -> failwith "Module type replaced"
-  | Not_replaced p -> p
-
 let rec resolved_module_path :
     t -> Cpath.Resolved.module_ -> Cpath.Resolved.module_ =
  fun s p ->
@@ -211,7 +207,7 @@ let rec resolved_module_path :
   | `Alias (p1, p2) ->
       `Alias (resolved_module_path s p1, resolved_module_path s p2)
   | `Subst (p1, p2) ->
-      `Subst (final_module_type @@ resolved_module_type_path s p1, resolved_module_path s p2)
+      `Subst (resolved_module_type_path s p1, resolved_module_path s p2)
   | `SubstAlias (p1, p2) ->
       `SubstAlias (resolved_module_path s p1, resolved_module_path s p2)
   | `Hidden p1 -> `Hidden (resolved_module_path s p1)
@@ -223,7 +219,7 @@ let rec resolved_module_path :
 
 and resolved_parent_path s = function
   | `Module m -> `Module (resolved_module_path s m)
-  | `ModuleType m -> `ModuleType (final_module_type @@ resolved_module_type_path s m)
+  | `ModuleType m -> `ModuleType (resolved_module_type_path s m)
   | `FragmentRoot as x -> x
 
 and module_path : t -> Cpath.module_ -> Cpath.module_ =
@@ -251,7 +247,11 @@ and module_path : t -> Cpath.module_ -> Cpath.module_ =
   | `Forward _ -> p
   | `Root _ -> p
 
-and resolved_module_type_path :
+and resolved_module_type_path s p = match cautious_resolved_module_type_path s p with
+  | Replaced (Path _p') ->  p
+  | Not_replaced  p' -> p'
+  | _ -> p
+and cautious_resolved_module_type_path :
     t -> Cpath.Resolved.module_type -> (Cpath.Resolved.module_type, ModuleType.expr) or_replaced =
  fun s p ->
   match p with
@@ -265,32 +265,33 @@ and resolved_module_type_path :
         | exception Not_found -> Not_replaced (`Local id))
   | `Identifier _ -> Not_replaced p
   | `Substituted p ->
-      resolved_module_type_path s p |> map_replaced (fun p -> `Substituted p)
+      cautious_resolved_module_type_path s p |> map_replaced (fun p -> `Substituted p)
   | `ModuleType (p, n) -> Not_replaced (`ModuleType (resolved_parent_path s p, n))
   | `CanonicalModuleType (mt1, mt2) ->
-      (match (resolved_module_type_path s mt1, module_type_path s mt2) with
+      (match (cautious_resolved_module_type_path s mt1, cautious_module_type_path s mt2) with
       | Not_replaced mt1', Not_replaced mt2' ->
           Not_replaced (`CanonicalModuleType (mt1', mt2'))
       | x, _ -> x)
   | `OpaqueModuleType m ->
       if s.unresolve_opaque_paths then raise Invalidated
       else
-        resolved_module_type_path s m |> map_replaced (fun x -> `OpaqueModuleType x)
+        cautious_resolved_module_type_path s m |> map_replaced (fun x -> `OpaqueModuleType x)
   | `SubstT (p1,p2) ->
       Not_replaced
-        (`SubstT((final_module_type @@ resolved_module_type_path s p1),
-          final_module_type @@ resolved_module_type_path s p2))
-
-
-and module_type_path : t -> Cpath.module_type -> Cpath.module_type module_type_or_replaced =
+        (`SubstT(resolved_module_type_path s p1,resolved_module_type_path s p2))
+and module_type_path: t -> Cpath.module_type -> Cpath.module_type = fun s p ->
+  match cautious_module_type_path s p with
+  | Not_replaced p -> p
+  | Replaced _ -> p
+and cautious_module_type_path : t -> Cpath.module_type -> Cpath.module_type module_type_or_replaced =
  fun s p ->
   match p with
   | `Resolved r -> (
-      try resolved_module_type_path s r |> map_replaced (fun r -> `Resolved r)
+      try cautious_resolved_module_type_path s r |> map_replaced (fun r -> `Resolved r)
       with Invalidated ->
         let path' = Cpath.unresolve_resolved_module_type_path r in
-        module_type_path s path')
-  | `Substituted p -> module_type_path s p |> map_replaced (fun r -> `Substituted r)
+        cautious_module_type_path s path')
+  | `Substituted p -> cautious_module_type_path s p |> map_replaced (fun r -> `Substituted r)
   | `Local (id, b) ->
       if ModuleTypeMap.mem id s.module_type_replacement then
         Replaced (ModuleTypeMap.find id s.module_type_replacement)
@@ -398,11 +399,7 @@ let rec resolved_signature_fragment :
     t -> Cfrag.resolved_signature -> Cfrag.resolved_signature =
  fun t r ->
   match r with
-  | `Root (`ModuleType  p) -> (
-      match resolved_module_type_path t p with
-      | Not_replaced p -> `Root (`ModuleType p)
-      | Replaced _ -> assert false (* OCTAFIXME *)
-    )
+  | `Root (`ModuleType  p) -> `Root (`ModuleType (resolved_module_type_path t p))
   | `Root (`Module p) -> `Root (`Module (resolved_module_path t p))
   | (`Subst _ | `SubstAlias _ | `OpaqueModule _ | `Module _) as x ->
       (resolved_module_fragment t x :> Cfrag.resolved_signature)
@@ -412,7 +409,7 @@ and resolved_module_fragment :
  fun t r ->
   match r with
   | `Subst (mty, f) ->
-      `Subst (final_module_type @@ resolved_module_type_path t mty, resolved_module_fragment t f)
+      `Subst (resolved_module_type_path t mty, resolved_module_fragment t f)
   | `SubstAlias (m, f) ->
       `SubstAlias (resolved_module_path t m, resolved_module_fragment t f)
   | `Module (sg, n) -> `Module (resolved_signature_fragment t sg, n)
@@ -535,7 +532,7 @@ and type_package s p =
   let open Component.TypeExpr.Package in
   let sub (x, y) = (type_fragment s x, type_expr s y) in
   {
-    path = final_module_type @@ module_type_path s p.path;
+    path = module_type_path s p.path;
     substitutions = List.map sub p.substitutions;
   }
 
@@ -579,8 +576,7 @@ and module_type s t =
   let expr =
     match t.expr with Some m -> Some (module_type_expr s m) | None -> None
   in
-  let fmodule_type_path s t = final_module_type @@ module_type_path s t in
-  { expr; doc = t.doc; canonical = option_ fmodule_type_path s t.canonical }
+  { expr; doc = t.doc; canonical = option_ module_type_path s t.canonical }
 
 and module_type_substitution s t =
   let open Component.ModuleTypeSubstitution in
@@ -645,7 +641,7 @@ and mto_resolved_module_path_invalidated s p =
 and u_module_type_expr s t =
   let open Component.ModuleType.U in
   match t with
-  | Path p -> Path (final_module_type @@ module_type_path s p)
+  | Path p -> Path (module_type_path s p)
   | Signature sg -> Signature (signature s sg)
   | With (subs, e) ->
       With (List.map (with_module_type_substitution s) subs, u_module_type_expr s e)
@@ -674,7 +670,7 @@ and module_type_expr s t =
   | Path { p_path; p_expansion } ->
       Path
         {
-          p_path = final_module_type @@ module_type_path s p_path;
+          p_path = module_type_path s p_path;
           p_expansion = option_ simple_expansion s p_expansion;
         }
   | Signature sg -> Signature (signature s sg)
