@@ -165,6 +165,7 @@ module Make (Syntax : SYNTAX) = struct
         | `Subst (_, rr) -> render_resolved_fragment (rr :> t)
         | `SubstAlias (_, rr) -> render_resolved_fragment (rr :> t)
         | `Module (`Root _, s) -> ModuleName.to_string s
+        | `Module_type (`Root _, s) -> ModuleTypeName.to_string s
         | `Type (`Root _, s) -> TypeName.to_string s
         | `Class (`Root _, s) -> ClassName.to_string s
         | `ClassType (`Root _, s) -> ClassTypeName.to_string s
