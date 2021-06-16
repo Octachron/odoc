@@ -547,7 +547,8 @@ and type_package s p =
   {
     path = (match module_type_path s p.path with
       | Not_replaced p -> p
-      | _ -> assert false
+      | Replaced Path p -> p.p_path
+      | Replaced _ -> assert false
     );
     substitutions = List.map sub p.substitutions;
   }
@@ -594,6 +595,7 @@ and module_type s t =
   in
   let maybe_path s t = match module_type_path s t with
     | Not_replaced p -> Some p
+    | Replaced Path p -> Some p.p_path
     | Replaced _ -> None
   in
   { expr; doc = t.doc; canonical = option_bind maybe_path s t.canonical }
