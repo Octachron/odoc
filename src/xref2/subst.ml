@@ -207,7 +207,11 @@ let rec resolved_module_path :
   | `Alias (p1, p2) ->
       `Alias (resolved_module_path s p1, resolved_module_path s p2)
   | `Subst (p1, p2) ->
-      `Subst (resolved_module_type_path s p1, resolved_module_path s p2)
+      let p1 = match resolved_module_type_path s p1 with
+        | Replaced _ -> failwith "Subst/unimplemented"
+        | Not_replaced p1 -> p1
+      in
+      `Subst (p1, resolved_module_path s p2)
   | `SubstAlias (p1, p2) ->
       `SubstAlias (resolved_module_path s p1, resolved_module_path s p2)
   | `Hidden p1 -> `Hidden (resolved_module_path s p1)
@@ -219,7 +223,12 @@ let rec resolved_module_path :
 
 and resolved_parent_path s = function
   | `Module m -> `Module (resolved_module_path s m)
-  | `ModuleType m -> `ModuleType (resolved_module_type_path s m)
+  | `ModuleType m ->
+      let p = match resolved_module_type_path s m with
+        | Replaced _ -> failwith "Parent_path/unimplemented"
+        | Not_replaced p1 -> p1
+      in
+      `ModuleType p
   | `FragmentRoot as x -> x
 
 and module_path : t -> Cpath.module_ -> Cpath.module_ =
@@ -247,11 +256,7 @@ and module_path : t -> Cpath.module_ -> Cpath.module_ =
   | `Forward _ -> p
   | `Root _ -> p
 
-and resolved_module_type_path s p = match cautious_resolved_module_type_path s p with
-  | Replaced (Path _p') ->  p
-  | Not_replaced  p' -> p'
-  | _ -> p
-and cautious_resolved_module_type_path :
+and resolved_module_type_path :
     t -> Cpath.Resolved.module_type -> (Cpath.Resolved.module_type, ModuleType.expr) or_replaced =
  fun s p ->
   match p with
@@ -265,33 +270,30 @@ and cautious_resolved_module_type_path :
         | exception Not_found -> Not_replaced (`Local id))
   | `Identifier _ -> Not_replaced p
   | `Substituted p ->
-      cautious_resolved_module_type_path s p |> map_replaced (fun p -> `Substituted p)
+      resolved_module_type_path s p |> map_replaced (fun p -> `Substituted p)
   | `ModuleType (p, n) -> Not_replaced (`ModuleType (resolved_parent_path s p, n))
   | `CanonicalModuleType (mt1, mt2) ->
-      (match (cautious_resolved_module_type_path s mt1, cautious_module_type_path s mt2) with
+      (match (resolved_module_type_path s mt1, module_type_path s mt2) with
       | Not_replaced mt1', Not_replaced mt2' ->
           Not_replaced (`CanonicalModuleType (mt1', mt2'))
       | x, _ -> x)
   | `OpaqueModuleType m ->
       if s.unresolve_opaque_paths then raise Invalidated
       else
-        cautious_resolved_module_type_path s m |> map_replaced (fun x -> `OpaqueModuleType x)
+        resolved_module_type_path s m |> map_replaced (fun x -> `OpaqueModuleType x)
   | `SubstT (p1,p2) ->
-      Not_replaced
-        (`SubstT(resolved_module_type_path s p1,resolved_module_type_path s p2))
-and module_type_path: t -> Cpath.module_type -> Cpath.module_type = fun s p ->
-  match cautious_module_type_path s p with
-  | Not_replaced p -> p
-  | Replaced _ -> p
-and cautious_module_type_path : t -> Cpath.module_type -> Cpath.module_type module_type_or_replaced =
+      match resolved_module_type_path s p1, resolved_module_type_path s p2 with
+      | Not_replaced p1, Not_replaced p2 -> Not_replaced (`SubstT(p1,p2))
+      | Replaced mt, _ | _, Replaced mt -> Replaced mt
+and module_type_path : t -> Cpath.module_type -> Cpath.module_type module_type_or_replaced =
  fun s p ->
   match p with
   | `Resolved r -> (
-      try cautious_resolved_module_type_path s r |> map_replaced (fun r -> `Resolved r)
+      try resolved_module_type_path s r |> map_replaced (fun r -> `Resolved r)
       with Invalidated ->
         let path' = Cpath.unresolve_resolved_module_type_path r in
-        cautious_module_type_path s path')
-  | `Substituted p -> cautious_module_type_path s p |> map_replaced (fun r -> `Substituted r)
+        module_type_path s path')
+  | `Substituted p -> module_type_path s p |> map_replaced (fun r -> `Substituted r)
   | `Local (id, b) ->
       if ModuleTypeMap.mem id s.module_type_replacement then
         Replaced (ModuleTypeMap.find id s.module_type_replacement)
@@ -399,7 +401,12 @@ let rec resolved_signature_fragment :
     t -> Cfrag.resolved_signature -> Cfrag.resolved_signature =
  fun t r ->
   match r with
-  | `Root (`ModuleType  p) -> `Root (`ModuleType (resolved_module_type_path t p))
+  | `Root (`ModuleType  p) ->
+      let p = match resolved_module_type_path t p with
+        | Not_replaced p -> p
+        | _ -> assert false
+      in
+      `Root (`ModuleType p)
   | `Root (`Module p) -> `Root (`Module (resolved_module_path t p))
   | (`Subst _ | `SubstAlias _ | `OpaqueModule _ | `Module _) as x ->
       (resolved_module_fragment t x :> Cfrag.resolved_signature)
@@ -409,7 +416,11 @@ and resolved_module_fragment :
  fun t r ->
   match r with
   | `Subst (mty, f) ->
-      `Subst (resolved_module_type_path t mty, resolved_module_fragment t f)
+      let p = match resolved_module_type_path t mty with
+        | Not_replaced p -> p
+        | _ -> failwith "Subst/module_fragment"
+      in
+      `Subst (p, resolved_module_fragment t f)
   | `SubstAlias (m, f) ->
       `SubstAlias (resolved_module_path t m, resolved_module_fragment t f)
   | `Module (sg, n) -> `Module (resolved_signature_fragment t sg, n)
@@ -465,6 +476,8 @@ let rec type_fragment : t -> Cfrag.type_ -> Cfrag.type_ =
   | `Dot (sg, n) -> `Dot (signature_fragment t sg, n)
 
 let option_ conv s x = match x with Some x -> Some (conv s x) | None -> None
+let option_bind conv s x = match x with Some x -> conv s x | None -> None
+
 
 let list conv s xs = List.map (conv s) xs
 
@@ -532,7 +545,10 @@ and type_package s p =
   let open Component.TypeExpr.Package in
   let sub (x, y) = (type_fragment s x, type_expr s y) in
   {
-    path = module_type_path s p.path;
+    path = (match module_type_path s p.path with
+      | Not_replaced p -> p
+      | _ -> assert false
+    );
     substitutions = List.map sub p.substitutions;
   }
 
@@ -576,7 +592,11 @@ and module_type s t =
   let expr =
     match t.expr with Some m -> Some (module_type_expr s m) | None -> None
   in
-  { expr; doc = t.doc; canonical = option_ module_type_path s t.canonical }
+  let maybe_path s t = match module_type_path s t with
+    | Not_replaced p -> Some p
+    | Replaced _ -> None
+  in
+  { expr; doc = t.doc; canonical = option_bind maybe_path s t.canonical }
 
 and module_type_substitution s t =
   let open Component.ModuleTypeSubstitution in
@@ -641,7 +661,16 @@ and mto_resolved_module_path_invalidated s p =
 and u_module_type_expr s t =
   let open Component.ModuleType.U in
   match t with
-  | Path p -> Path (module_type_path s p)
+  | Path p ->
+      begin match module_type_path s p with
+        | Not_replaced p -> Path p
+        | Replaced eqn -> match eqn with
+          | Path p -> Path p.p_path
+          | Signature s -> Signature s
+          | TypeOf t -> TypeOf t
+          | With w -> With (w.w_substitutions, w.w_expr)
+          | Functor _ -> failwith "u_module_type_expr/unimplemented"
+      end
   | Signature sg -> Signature (signature s sg)
   | With (subs, e) ->
       With (List.map (with_module_type_substitution s) subs, u_module_type_expr s e)
@@ -668,11 +697,15 @@ and module_type_expr s t =
   let open Component.ModuleType in
   match t with
   | Path { p_path; p_expansion } ->
-      Path
-        {
-          p_path = module_type_path s p_path;
-          p_expansion = option_ simple_expansion s p_expansion;
-        }
+      begin match module_type_path s p_path with
+        | Not_replaced p_path ->
+            Path
+              {
+                p_path;
+                p_expansion = option_ simple_expansion s p_expansion;
+              }
+        | Replaced s -> s
+      end
   | Signature sg -> Signature (signature s sg)
   | Functor (arg, expr) ->
       Functor (functor_parameter s arg, module_type_expr s expr)
