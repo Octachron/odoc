@@ -523,7 +523,7 @@ and module_type_expr_sub id ~fragment_root (sg_res, env, subs) lsub =
               Component.ModuleType.ModuleTypeSubst (cfrag', mty')
             in
             Tools.fragmap ~mark_substituted:true env resolved_csub sg
-            >>= fun sg' -> Ok (sg', Odoc_model.Lang.ModuleType.ModuleTypeEq (frag', mty))
+            >>= fun sg' -> Ok (sg', Odoc_model.Lang.ModuleType.ModuleTypeSubst (frag', mty))
 
       in
       match sg_and_sub with
