@@ -1200,7 +1200,7 @@ module Make (Syntax : SYNTAX) = struct
 
     and module_type_substitution (t : Odoc_model.Lang.ModuleTypeSubstitution.t) =
       let modname = Paths.Identifier.name t.id in
-      let modname, expansion_doc, mty = module_type_manifest modname t.id t.doc (Some t.manifest) in
+      let modname, expansion_doc, mty = module_type_manifest ~subst:true modname t.id t.doc (Some t.manifest) in
       let content =
         O.documentedSrc
           (O.keyword "module" ++ O.txt " " ++ O.keyword "type" ++ O.txt " ")
@@ -1355,7 +1355,7 @@ module Make (Syntax : SYNTAX) = struct
       | Alias (mod_path, _) -> Link.from_path (mod_path :> Paths.Path.t)
       | ModuleType mt -> mty mt
 
-    and module_type_manifest modname id doc manifest =
+    and module_type_manifest ~subst modname id doc manifest =
         let expansion =
           match manifest with
           | None -> None
@@ -1376,7 +1376,7 @@ module Make (Syntax : SYNTAX) = struct
         let summary =
           match manifest with
           | None -> O.noop
-          | Some expr -> O.txt " = " ++ mty expr
+          | Some expr -> (if subst then  O.txt " := " else O.txt " = ") ++ mty expr
         in
         modname,
         expansion_doc,
@@ -1384,7 +1384,7 @@ module Make (Syntax : SYNTAX) = struct
 
     and module_type (t : Odoc_model.Lang.ModuleType.t) =
       let modname = Paths.Identifier.name t.id in
-      let modname, expansion_doc, mty = module_type_manifest modname t.id t.doc t.expr in
+      let modname, expansion_doc, mty = module_type_manifest ~subst:false modname t.id t.doc t.expr in
       let content =
         O.documentedSrc
           (O.keyword "module" ++ O.txt " " ++ O.keyword "type" ++ O.txt " ")
