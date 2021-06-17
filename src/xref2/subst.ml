@@ -208,7 +208,10 @@ let rec resolved_module_path :
       `Alias (resolved_module_path s p1, resolved_module_path s p2)
   | `Subst (p1, p2) ->
       let p1 = match resolved_module_type_path s p1 with
-        | Replaced _ -> failwith "Subst/unimplemented"
+        | Replaced _ ->
+            (* the left hand side of Subst is a named module type inside a module,
+               it cannot be substituted away *)
+            assert false
         | Not_replaced p1 -> p1
       in
       `Subst (p1, resolved_module_path s p2)
@@ -225,7 +228,7 @@ and resolved_parent_path s = function
   | `Module m -> `Module (resolved_module_path s m)
   | `ModuleType m ->
       let p = match resolved_module_type_path s m with
-        | Replaced _ -> failwith "Parent_path/unimplemented"
+        | Replaced _ -> assert false
         | Not_replaced p1 -> p1
       in
       `ModuleType p
@@ -404,7 +407,7 @@ let rec resolved_signature_fragment :
   | `Root (`ModuleType  p) ->
       let p = match resolved_module_type_path t p with
         | Not_replaced p -> p
-        | _ -> assert false
+        | Replaced _ -> assert false
       in
       `Root (`ModuleType p)
   | `Root (`Module p) -> `Root (`Module (resolved_module_path t p))
@@ -418,7 +421,10 @@ and resolved_module_fragment :
   | `Subst (mty, f) ->
       let p = match resolved_module_type_path t mty with
         | Not_replaced p -> p
-        | _ -> failwith "Subst/module_fragment"
+        | Replaced _ ->
+            (* the left hand side of subst is a named module type inside a module,
+               it cannot be substituted *)
+            assert false
       in
       `Subst (p, resolved_module_fragment t f)
   | `SubstAlias (m, f) ->
@@ -548,8 +554,10 @@ and type_package s p =
     path = (match module_type_path s p.path with
       | Not_replaced p -> p
       | Replaced Path p -> p.p_path
-      | Replaced _ -> assert false
-    );
+      | Replaced _ ->
+           (* substituting away a packed module type by a non-path module type is a type error *)
+          assert false
+    *;
     substitutions = List.map sub p.substitutions;
   }
 
@@ -671,7 +679,9 @@ and u_module_type_expr s t =
           | Signature s -> Signature s
           | TypeOf t -> TypeOf t
           | With w -> With (w.w_substitutions, w.w_expr)
-          | Functor _ -> failwith "u_module_type_expr/unimplemented"
+          | Functor _ ->
+              (* non functor cannot be substituted away to a functor *)
+               assert false
       end
   | Signature sg -> Signature (signature s sg)
   | With (subs, e) ->
